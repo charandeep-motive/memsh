@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"memsh/internal/db"
+	"github.com/charandeep-motive/memsh/internal/db"
 )
 
 type Entry struct {

@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"memsh/internal/config"
-	"memsh/internal/db"
-	"memsh/internal/record"
-	"memsh/internal/search"
+	"github.com/charandeep-motive/memsh/internal/config"
+	"github.com/charandeep-motive/memsh/internal/db"
+	"github.com/charandeep-motive/memsh/internal/record"
+	"github.com/charandeep-motive/memsh/internal/search"
 )
 
 const version = "0.1.0"

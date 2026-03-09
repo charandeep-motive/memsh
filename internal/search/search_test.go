@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"memsh/internal/db"
-	"memsh/internal/record"
-	"memsh/internal/search"
+	"github.com/charandeep-motive/memsh/internal/db"
+	"github.com/charandeep-motive/memsh/internal/record"
+	"github.com/charandeep-motive/memsh/internal/search"
 )
 
 func TestFindRanksPrefixAndLimitsResults(t *testing.T) {

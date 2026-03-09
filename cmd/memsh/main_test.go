@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"memsh/internal/config"
-	"memsh/internal/db"
-	"memsh/internal/record"
+	"github.com/charandeep-motive/memsh/internal/config"
+	"github.com/charandeep-motive/memsh/internal/db"
+	"github.com/charandeep-motive/memsh/internal/record"
 )
 
 func TestRunDeleteRemovesCommand(t *testing.T) {

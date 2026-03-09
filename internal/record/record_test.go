@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"memsh/internal/db"
-	"memsh/internal/record"
+	"github.com/charandeep-motive/memsh/internal/db"
+	"github.com/charandeep-motive/memsh/internal/record"
 )
 
 func TestStoreUpsertsFrequency(t *testing.T) {
