@@ -20,6 +20,7 @@ Current scope:
 - zsh only
 - local SQLite storage
 - `fzf` recommended for the best picker UI
+- configurable suggestion count through `MEMSH_MAX_SUGGESTIONS`
 
 ## What needs to be shipped
 
@@ -96,6 +97,12 @@ The installer:
 - adds PATH setup to `~/.zshrc` if missing
 - adds the memsh plugin source line to `~/.zshrc` if missing
 
+If you want more or fewer suggestions than the default 5, add this before the `source ~/.config/memsh/memsh.zsh` line in `~/.zshrc`:
+
+```sh
+export MEMSH_MAX_SUGGESTIONS=10
+```
+
 ### Step 3: reload zsh
 
 ```sh
@@ -105,7 +112,7 @@ source ~/.zshrc
 ### Step 4: verify install
 
 ```sh
-memsh --help
+memsh help
 memsh doctor
 ```
 
@@ -193,7 +200,7 @@ source ~/.zshrc
 ### Step 7: verify install
 
 ```sh
-memsh --help
+memsh help
 memsh doctor
 ```
 
@@ -207,7 +214,7 @@ For now, use this release process:
 4. Transfer the archive to the target machine.
 5. Run `./install.sh` on the target machine.
 6. Reload zsh.
-7. Verify with `memsh --help` and `memsh doctor`.
+7. Verify with `memsh help` and `memsh doctor`.
 
 Exact commands:
 
@@ -237,9 +244,25 @@ source ~/.zshrc
 If the CLI changes, verify again:
 
 ```sh
-memsh --help
+memsh help
 memsh doctor
 ```
+
+If you want to reset all stored suggestions without uninstalling memsh:
+
+```sh
+memsh clear
+```
+
+`memsh clear` asks for `Y/n` confirmation and prunes the least-used 10% of stored commands.
+
+To wipe the whole suggestion database:
+
+```sh
+memsh destroy
+```
+
+`memsh destroy` asks for `Y/n` confirmation and removes all stored commands.
 
 ## Uninstall
 

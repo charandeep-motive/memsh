@@ -93,6 +93,41 @@ func TestStoreSkipsFailedCommands(t *testing.T) {
 	}
 }
 
+func TestStoreSkipsMemshCommands(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	database := openStore(t)
+	defer database.Close()
+
+	commands := []string{
+		"memsh stats",
+		"memsh clear",
+		"memsh destroy",
+		"memsh delete \"git status\"",
+	}
+
+	for _, command := range commands {
+		if err := record.Store(ctx, database, record.Entry{
+			Command:   command,
+			Directory: "/tmp/project-a",
+			ExitCode:  0,
+			UsedAt:    time.Unix(1_700_000_000, 0),
+		}); err != nil {
+			t.Fatalf("store memsh command %q: %v", command, err)
+		}
+	}
+
+	var count int
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands`).Scan(&count); err != nil {
+		t.Fatalf("count commands: %v", err)
+	}
+
+	if count != 0 {
+		t.Fatalf("count = %d, want 0", count)
+	}
+}
+
 func openStore(t *testing.T) *db.Store {
 	t.Helper()
 

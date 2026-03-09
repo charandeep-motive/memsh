@@ -31,8 +31,12 @@ append_if_missing() {
 }
 
 resolve_binary_source() {
-  if [[ -x "$SCRIPT_DIR/memsh" ]]; then
-    MEMSH_BINARY_SOURCE="$SCRIPT_DIR/memsh"
+  if [[ -f "$SCRIPT_DIR/go.mod" && -d "$SCRIPT_DIR/cmd/memsh" ]]; then
+    command -v go >/dev/null 2>&1 || fail "Go is required to build memsh from source"
+    say "Building memsh binary..."
+    mkdir -p "$SCRIPT_DIR/bin"
+    go build -o "$SCRIPT_DIR/bin/memsh" "$SCRIPT_DIR/cmd/memsh"
+    MEMSH_BINARY_SOURCE="$SCRIPT_DIR/bin/memsh"
     return
   fi
 
@@ -41,12 +45,8 @@ resolve_binary_source() {
     return
   fi
 
-  if [[ -f "$SCRIPT_DIR/go.mod" && -d "$SCRIPT_DIR/cmd/memsh" ]]; then
-    command -v go >/dev/null 2>&1 || fail "Go is required to build memsh from source"
-    say "Building memsh binary..."
-    mkdir -p "$SCRIPT_DIR/bin"
-    go build -o "$SCRIPT_DIR/bin/memsh" "$SCRIPT_DIR/cmd/memsh"
-    MEMSH_BINARY_SOURCE="$SCRIPT_DIR/bin/memsh"
+  if [[ -x "$SCRIPT_DIR/memsh" ]]; then
+    MEMSH_BINARY_SOURCE="$SCRIPT_DIR/memsh"
     return
   fi
 
@@ -97,4 +97,4 @@ fi
 say ""
 say "Next steps:"
 say "  1. Reload your shell: source $ZSHRC_PATH"
-say "  2. Verify: memsh --help && memsh doctor"
+say "  2. Verify: memsh help && memsh doctor"

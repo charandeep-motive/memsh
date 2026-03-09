@@ -8,6 +8,7 @@ fi
 : ${MEMSH_BIN:=memsh}
 : ${MEMSH_AUTOSUGGEST:=1}
 : ${MEMSH_AUTOSUGGEST_MIN_CHARS:=2}
+: ${MEMSH_MAX_SUGGESTIONS:=5}
 : ${MEMSH_FZF_HEIGHT:=40%}
 
 typeset -g MEMSH_LAST_COMMAND=""
@@ -41,7 +42,7 @@ _memsh_complete() {
     return 1
   fi
 
-  suggestions=("${(@f)$("$MEMSH_BIN" search --query "$query" --limit 5 --directory "$PWD" 2>/dev/null)}")
+  suggestions=("${(@f)$("$MEMSH_BIN" search --query "$query" --limit "$MEMSH_MAX_SUGGESTIONS" --directory "$PWD" 2>/dev/null)}")
 
   if (( ${#suggestions[@]} == 0 )); then
     return 1
@@ -62,7 +63,7 @@ memsh_load_suggestions() {
     return 1
   fi
 
-  raw_suggestions=("${(@f)$("$MEMSH_BIN" search --query "$query" --limit 5 --directory "$PWD" 2>/dev/null)}")
+  raw_suggestions=("${(@f)$("$MEMSH_BIN" search --query "$query" --limit "$MEMSH_MAX_SUGGESTIONS" --directory "$PWD" 2>/dev/null)}")
 
   for suggestion in "${raw_suggestions[@]}"; do
     if [[ -n "${suggestion//[[:space:]]/}" ]]; then

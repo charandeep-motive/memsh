@@ -1,20 +1,22 @@
 # memsh
 
-memsh is a local shell memory engine for macOS + zsh. It records successfully executed commands into a local SQLite database and returns up to 5 ranked suggestions through a zsh completion widget.
+memsh is a local shell memory engine for macOS + zsh. It records successfully executed commands into a local SQLite database and returns ranked suggestions through a zsh completion widget.
 
 ## MVP scope
 
 - macOS + zsh only
 - local-first storage
 - Go CLI + SQLite backend
-- top 5 suggestions
+- configurable suggestion count, default 5
 - ranking by frequency + recency
 
 ## Commands
 
 ```text
-memsh --help
-memsh --delete "kubectl get pods"
+memsh help
+memsh clear
+memsh destroy
+memsh delete "kubectl get pods"
 memsh record --command "kubectl get pods" --directory "$PWD" --exit-code 0
 memsh search --query "kubectl" --limit 5
 memsh stats
@@ -31,7 +33,18 @@ The plugin watches what you type once the buffer reaches 2 characters and shows 
 
 You can disable automatic suggestions by setting `MEMSH_AUTOSUGGEST=0` before sourcing the plugin.
 
+You can change the number of suggestions shown by setting `MEMSH_MAX_SUGGESTIONS` before sourcing the plugin, for example:
+
+```sh
+export MEMSH_MAX_SUGGESTIONS=10
+source ~/.config/memsh/memsh.zsh
+```
+
 memsh only saves commands whose exit code is `0`, so failed commands and common typos do not pollute the suggestion database.
+
+memsh also skips recording its own administrative commands like `memsh help`, `memsh stats`, `memsh clear`, and `memsh destroy`.
+
+`memsh clear` asks for `Y/n` confirmation and prunes the least-used 10% of stored commands. `memsh destroy` asks for `Y/n` confirmation and wipes the whole command database.
 
 ## Development
 

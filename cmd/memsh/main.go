@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -36,6 +38,10 @@ func run(ctx context.Context, args []string) error {
 	case "help", "--help", "-h":
 		printUsage()
 		return nil
+	case "clear", "--clear":
+		return runClear(ctx, os.Stdin, os.Stdout)
+	case "destroy", "--destroy":
+		return runDestroy(ctx, os.Stdin, os.Stdout)
 	case "delete", "--delete":
 		return runDelete(ctx, args[1:])
 	case "version", "--version", "-v":
@@ -96,7 +102,7 @@ func runSearch(ctx context.Context, args []string) error {
 	fs.SetOutput(os.Stderr)
 
 	query := fs.String("query", "", "query prefix or substring")
-	limit := fs.Int("limit", 5, "max results")
+	limit := fs.Int("limit", defaultSuggestionLimit(), "max results")
 	cwd := fs.String("directory", "", "current working directory")
 
 	if err := fs.Parse(args); err != nil {
@@ -163,6 +169,56 @@ func runDelete(ctx context.Context, args []string) error {
 	return nil
 }
 
+func runClear(ctx context.Context, input io.Reader, output io.Writer) error {
+	confirmed, err := confirmAction(input, output, "Prune the least-used 10% of stored commands? [Y/n]: ")
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		fmt.Fprintln(output, "clear cancelled")
+		return nil
+	}
+
+	database, err := openDatabase(ctx)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	cleared, err := db.PruneLeastUsedCommands(ctx, database)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(output, "cleared: %d commands\n", cleared)
+	return nil
+}
+
+func runDestroy(ctx context.Context, input io.Reader, output io.Writer) error {
+	confirmed, err := confirmAction(input, output, "Destroy all stored commands? [Y/n]: ")
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		fmt.Fprintln(output, "destroy cancelled")
+		return nil
+	}
+
+	database, err := openDatabase(ctx)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	destroyed, err := db.DestroyCommands(ctx, database)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(output, "destroyed: %d commands\n", destroyed)
+	return nil
+}
+
 func runStats(ctx context.Context) error {
 	database, err := openDatabase(ctx)
 	if err != nil {
@@ -220,11 +276,17 @@ func printUsage() {
 	fmt.Println(`memsh records shell commands and returns ranked suggestions.
 
 Usage:
-  memsh --help
+  memsh help
 	Show this help text
 
-  memsh --delete "git status"
+  memsh delete "git status"
 	Delete an exact command from the suggestion database
+
+  memsh clear
+	Prune the least-used 10% of stored commands
+
+  memsh destroy
+	Destroy all stored commands
 
   memsh record --command "git status" --directory "$PWD" --exit-code 0
 	Record a successful command
@@ -240,4 +302,44 @@ Usage:
 
   memsh version
 	Show memsh version`)
+}
+
+func defaultSuggestionLimit() int {
+	value := strings.TrimSpace(os.Getenv("MEMSH_MAX_SUGGESTIONS"))
+	if value == "" {
+		return 5
+	}
+
+	limit, err := strconv.Atoi(value)
+	if err != nil || limit <= 0 {
+		return 5
+	}
+
+	return limit
+}
+
+func confirmAction(input io.Reader, output io.Writer, prompt string) (bool, error) {
+	reader := bufio.NewReader(input)
+
+	for {
+		fmt.Fprint(output, prompt)
+		answer, err := reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, fmt.Errorf("read confirmation: %w", err)
+		}
+
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		switch answer {
+		case "", "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		}
+
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+
+		fmt.Fprintln(output, "Please answer Y or n.")
+	}
 }

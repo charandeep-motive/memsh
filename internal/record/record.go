@@ -26,6 +26,10 @@ func Store(ctx context.Context, database *db.Store, entry Entry) error {
 		return nil
 	}
 
+	if isInternalCommand(command) {
+		return nil
+	}
+
 	usedAt := entry.UsedAt
 	if usedAt.IsZero() {
 		usedAt = time.Now()
@@ -45,4 +49,8 @@ func Store(ctx context.Context, database *db.Store, entry Entry) error {
 	}
 
 	return nil
+}
+
+func isInternalCommand(command string) bool {
+	return command == "memsh" || strings.HasPrefix(command, "memsh ")
 }

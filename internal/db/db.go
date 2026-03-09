@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 
@@ -18,6 +19,56 @@ type Stats struct {
 	TotalRecords   int
 	UniqueCommands int
 	TopCommands    []string
+}
+
+func PruneLeastUsedCommands(ctx context.Context, store *Store) (int64, error) {
+	var total int64
+	if err := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands`).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count commands: %w", err)
+	}
+
+	if total == 0 {
+		return 0, nil
+	}
+
+	pruneCount := int64(math.Ceil(float64(total) * 0.10))
+	if pruneCount < 1 {
+		pruneCount = 1
+	}
+
+	result, err := store.ExecContext(ctx, `
+		DELETE FROM commands
+		WHERE id IN (
+			SELECT id
+			FROM commands
+			ORDER BY frequency ASC, last_used ASC, id ASC
+			LIMIT ?
+		)
+	`, pruneCount)
+	if err != nil {
+		return 0, fmt.Errorf("prune commands: %w", err)
+	}
+
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count pruned rows: %w", err)
+	}
+
+	return deleted, nil
+}
+
+func DestroyCommands(ctx context.Context, store *Store) (int64, error) {
+	result, err := store.ExecContext(ctx, `DELETE FROM commands`)
+	if err != nil {
+		return 0, fmt.Errorf("destroy commands: %w", err)
+	}
+
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count destroyed rows: %w", err)
+	}
+
+	return deleted, nil
 }
 
 func DeleteCommand(ctx context.Context, store *Store, command string) (bool, error) {
