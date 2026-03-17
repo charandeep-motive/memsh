@@ -32,6 +32,8 @@ memsh doctor
 
 Run `memsh` with no arguments to open an interactive command-search box. Type inside the picker to filter stored commands, then press Enter to print the selected command.
 
+memsh now uses a built-in Charm-based TUI for interactive search and command selection, so it does not depend on `fzf`.
+
 The plugin watches what you type once the buffer reaches 2 characters and shows a lightweight hint when suggestions are available. Press `Ctrl-Space` or the Down arrow to open a styled picker, then use the Up/Down arrows and Enter to select a command.
 
 You can disable automatic suggestions by setting `MEMSH_AUTOSUGGEST=0` before sourcing the plugin.

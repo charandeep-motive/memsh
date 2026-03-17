@@ -4,4 +4,3 @@
 bin/
 dist/
 coverage.out
-go.sum

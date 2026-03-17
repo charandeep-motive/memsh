@@ -2,14 +2,12 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +16,7 @@ import (
 	"github.com/charandeep-motive/memsh/internal/db"
 	"github.com/charandeep-motive/memsh/internal/record"
 	"github.com/charandeep-motive/memsh/internal/search"
+	"github.com/charandeep-motive/memsh/internal/ui"
 )
 
 const version = "0.1.0"
@@ -39,6 +38,8 @@ func run(ctx context.Context, args []string) error {
 	case "help", "--help", "-h":
 		printUsage()
 		return nil
+	case "pick":
+		return runPick(ctx, args[1:], os.Stdout)
 	case "clear", "--clear":
 		return runClear(ctx, os.Stdin, os.Stdout)
 	case "destroy", "--destroy":
@@ -265,10 +266,23 @@ func runDoctor(ctx context.Context) error {
 }
 
 func runInteractiveSearch(ctx context.Context, output io.Writer) error {
-	if _, err := exec.LookPath("fzf"); err != nil {
-		return errors.New("fzf is required for interactive memsh search")
+	return runInteractivePicker(ctx, output, "", "memsh command search", "")
+}
+
+func runPick(ctx context.Context, args []string, output io.Writer) error {
+	fs := flag.NewFlagSet("pick", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+
+	query := fs.String("query", "", "initial query for the picker")
+	outputFile := fs.String("output-file", "", "write the selected command to a file instead of stdout")
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
+	return runInteractivePicker(ctx, output, *query, "memsh suggestions", *outputFile)
+}
+
+func runInteractivePicker(ctx context.Context, output io.Writer, initialQuery string, title string, outputFile string) error {
 	database, err := openDatabase(ctx)
 	if err != nil {
 		return err
@@ -284,40 +298,19 @@ func runInteractiveSearch(ctx context.Context, output io.Writer) error {
 		return errors.New("no stored commands found")
 	}
 
-	var commandInput bytes.Buffer
-	for _, command := range commands {
-		commandInput.WriteString(command)
-		commandInput.WriteByte('\n')
+	selection, err := ui.RunCommandPicker(title, commands, initialQuery, output)
+	if err != nil {
+		return err
 	}
-
-	fzf := exec.CommandContext(ctx, "fzf",
-		"--height=40%",
-		"--layout=reverse",
-		"--border=rounded",
-		"--prompt=memsh> ",
-		"--header=memsh command search",
-		"--no-info",
-		"--no-mouse",
-	)
-	fzf.Stdin = &commandInput
-	var selected bytes.Buffer
-	fzf.Stdout = &selected
-	fzf.Stderr = os.Stderr
-
-	if err := fzf.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
-			return nil
-		}
-		return fmt.Errorf("run fzf: %w", err)
-	}
-
-	choice := strings.TrimSpace(selected.String())
-	if choice == "" {
+	if strings.TrimSpace(selection) == "" {
 		return nil
 	}
 
-	_, err = fmt.Fprintln(output, choice)
+	if outputFile != "" {
+		return os.WriteFile(outputFile, []byte(selection), 0o600)
+	}
+
+	_, err = fmt.Fprintln(output, selection)
 	return err
 }
 
@@ -339,6 +332,9 @@ Usage:
 
   memsh help
 	Show this help text
+
+  memsh pick --query "git"
+	Open the interactive picker with a pre-filled query
 
   memsh delete "git status"
 	Delete an exact command from the suggestion database

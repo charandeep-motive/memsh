@@ -17,7 +17,6 @@ Current scope:
 - macOS only
 - zsh only
 - local SQLite storage
-- `fzf` recommended for the best picker UI
 - configurable suggestion count through `MEMSH_MAX_SUGGESTIONS`
 - `memsh` with no arguments opens an interactive search box
 
@@ -29,7 +28,3 @@ Use a macOS machine with:
 
 - Go installed
 - zsh available
-
-Optional:
-
-- `fzf` for the nicer interactive picker UI

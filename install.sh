@@ -89,11 +89,6 @@ say "memsh installed"
 say "  binary: $INSTALL_BIN_DIR/memsh"
 say "  plugin: $INSTALL_CONFIG_DIR/memsh.zsh"
 
-if ! command -v fzf >/dev/null 2>&1; then
-  say "optional: install fzf for the nicer picker UI"
-  say "  brew install fzf"
-fi
-
 say ""
 say "Next steps:"
 say "  1. Reload your shell: source $ZSHRC_PATH"

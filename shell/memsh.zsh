@@ -9,7 +9,6 @@ fi
 : ${MEMSH_AUTOSUGGEST:=1}
 : ${MEMSH_AUTOSUGGEST_MIN_CHARS:=2}
 : ${MEMSH_MAX_SUGGESTIONS:=5}
-: ${MEMSH_FZF_HEIGHT:=40%}
 
 typeset -g MEMSH_LAST_COMMAND=""
 typeset -ga MEMSH_SUGGESTIONS_CACHE=()
@@ -76,24 +75,19 @@ memsh_load_suggestions() {
 
 memsh_pick_suggestion() {
   local selection
+  local temp_file
 
   if ! memsh_load_suggestions; then
     zle -M "memsh: no suggestions"
     return
   fi
 
-  if whence fzf >/dev/null 2>&1; then
-    selection=$(printf '%s\n' "${MEMSH_SUGGESTIONS_CACHE[@]}" | fzf \
-      --height="$MEMSH_FZF_HEIGHT" \
-      --layout=reverse \
-      --border=rounded \
-      --prompt='memsh> ' \
-      --header='memsh suggestions' \
-      --no-info \
-      --no-mouse)
-  else
-    zle memsh-suggest
-    return
+  temp_file=$(mktemp -t memsh-pick.XXXXXX) || return 1
+  "$MEMSH_BIN" pick --query "$BUFFER" --output-file "$temp_file"
+
+  if [[ -f "$temp_file" ]]; then
+    selection=$(<"$temp_file")
+    rm -f "$temp_file"
   fi
 
   if [[ -n "$selection" ]]; then
