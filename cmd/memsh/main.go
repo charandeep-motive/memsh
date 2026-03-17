@@ -2,12 +2,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -30,8 +32,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		printUsage()
-		return nil
+		return runInteractiveSearch(ctx, os.Stdout)
 	}
 
 	switch args[0] {
@@ -263,6 +264,63 @@ func runDoctor(ctx context.Context) error {
 	return nil
 }
 
+func runInteractiveSearch(ctx context.Context, output io.Writer) error {
+	if _, err := exec.LookPath("fzf"); err != nil {
+		return errors.New("fzf is required for interactive memsh search")
+	}
+
+	database, err := openDatabase(ctx)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+
+	commands, err := db.ListCommands(ctx, database, 0)
+	if err != nil {
+		return err
+	}
+
+	if len(commands) == 0 {
+		return errors.New("no stored commands found")
+	}
+
+	var commandInput bytes.Buffer
+	for _, command := range commands {
+		commandInput.WriteString(command)
+		commandInput.WriteByte('\n')
+	}
+
+	fzf := exec.CommandContext(ctx, "fzf",
+		"--height=40%",
+		"--layout=reverse",
+		"--border=rounded",
+		"--prompt=memsh> ",
+		"--header=memsh command search",
+		"--no-info",
+		"--no-mouse",
+	)
+	fzf.Stdin = &commandInput
+	var selected bytes.Buffer
+	fzf.Stdout = &selected
+	fzf.Stderr = os.Stderr
+
+	if err := fzf.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return nil
+		}
+		return fmt.Errorf("run fzf: %w", err)
+	}
+
+	choice := strings.TrimSpace(selected.String())
+	if choice == "" {
+		return nil
+	}
+
+	_, err = fmt.Fprintln(output, choice)
+	return err
+}
+
 func openDatabase(ctx context.Context) (*db.Store, error) {
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -276,6 +334,9 @@ func printUsage() {
 	fmt.Println(`memsh records shell commands and returns ranked suggestions.
 
 Usage:
+  memsh
+	Open the interactive command search box
+
   memsh help
 	Show this help text
 

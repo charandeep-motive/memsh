@@ -19,6 +19,7 @@ Current scope:
 - local SQLite storage
 - `fzf` recommended for the best picker UI
 - configurable suggestion count through `MEMSH_MAX_SUGGESTIONS`
+- `memsh` with no arguments opens an interactive search box
 
 ## Prerequisites
 

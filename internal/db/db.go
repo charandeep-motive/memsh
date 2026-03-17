@@ -21,6 +21,40 @@ type Stats struct {
 	TopCommands    []string
 }
 
+func ListCommands(ctx context.Context, store *Store, limit int) ([]string, error) {
+	query := `
+		SELECT command
+		FROM commands
+		ORDER BY frequency DESC, last_used DESC
+	`
+	args := []any{}
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := store.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list commands: %w", err)
+	}
+	defer rows.Close()
+
+	commands := []string{}
+	for rows.Next() {
+		var command string
+		if err := rows.Scan(&command); err != nil {
+			return nil, fmt.Errorf("scan command: %w", err)
+		}
+		commands = append(commands, command)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate commands: %w", err)
+	}
+
+	return commands, nil
+}
+
 func PruneLeastUsedCommands(ctx context.Context, store *Store) (int64, error) {
 	var total int64
 	if err := store.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands`).Scan(&total); err != nil {

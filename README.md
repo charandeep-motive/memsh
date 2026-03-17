@@ -13,6 +13,7 @@ memsh is a local shell memory engine for macOS + zsh. It records successfully ex
 ## Commands
 
 ```text
+memsh
 memsh help
 memsh clear
 memsh destroy
@@ -28,6 +29,8 @@ memsh doctor
 ```sh
 ./install.sh
 ```
+
+Run `memsh` with no arguments to open an interactive command-search box. Type inside the picker to filter stored commands, then press Enter to print the selected command.
 
 The plugin watches what you type once the buffer reaches 2 characters and shows a lightweight hint when suggestions are available. Press `Ctrl-Space` or the Down arrow to open a styled picker, then use the Up/Down arrows and Enter to select a command.
 
