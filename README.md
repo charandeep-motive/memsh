@@ -32,8 +32,6 @@ memsh doctor
 
 Run `memsh` with no arguments to open an interactive command-search box. Type inside the picker to filter stored commands, then press Enter to print the selected command.
 
-memsh now uses a built-in Charm-based TUI for interactive search and command selection, so it does not depend on `fzf`.
-
 The plugin watches what you type once the buffer reaches 2 characters and shows a lightweight hint when suggestions are available. Press `Ctrl-Space` or the Down arrow to open a styled picker, then use the Up/Down arrows and Enter to select a command.
 
 You can disable automatic suggestions by setting `MEMSH_AUTOSUGGEST=0` before sourcing the plugin.
@@ -48,8 +46,6 @@ source ~/.config/memsh/memsh.zsh
 memsh only saves commands whose exit code is `0`, so failed commands and common typos do not pollute the suggestion database.
 
 memsh also skips recording its own administrative commands like `memsh help`, `memsh stats`, `memsh clear`, and `memsh destroy`.
-
-`memsh clear` asks for `Y/n` confirmation and prunes the least-used 10% of stored commands. `memsh destroy` asks for `Y/n` confirmation and wipes the whole command database.
 
 ## Development
 
