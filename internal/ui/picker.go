@@ -2,6 +2,8 @@ package ui
 
 import (
 	"io"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -116,6 +118,9 @@ func (m pickerModel) View() string {
 	borderStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8")).Padding(1, 2)
 
 	availableWidth := max(60, m.width-6)
+	if configuredWidth := pickerWidth(); configuredWidth > 0 {
+		availableWidth = min(configuredWidth, availableWidth)
+	}
 	if availableWidth > 140 {
 		availableWidth = 140
 	}
@@ -167,7 +172,7 @@ func (m pickerModel) visibleCommands() []visibleCommand {
 		return nil
 	}
 
-	maxItems := 10
+	maxItems := pickerMaxItems()
 	if m.height > 12 {
 		maxItems = min(12, m.height-8)
 	}
@@ -182,5 +187,47 @@ func (m pickerModel) visibleCommands() []visibleCommand {
 	for index := start; index < end; index++ {
 		items = append(items, visibleCommand{index: index, command: m.filtered[index]})
 	}
+	return items
+}
+
+func min(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func pickerWidth() int {
+	value := strings.TrimSpace(os.Getenv("MEMSH_UI_WIDTH"))
+	if value == "" {
+		return 100
+	}
+
+	width, err := strconv.Atoi(value)
+	if err != nil || width < 60 {
+		return 100
+	}
+
+	return width
+}
+
+func pickerMaxItems() int {
+	value := strings.TrimSpace(os.Getenv("MEMSH_UI_MAX_ITEMS"))
+	if value == "" {
+		return 10
+	}
+
+	items, err := strconv.Atoi(value)
+	if err != nil || items < 3 {
+		return 10
+	}
+
 	return items
 }

@@ -5,6 +5,10 @@ if ! whence compdef >/dev/null 2>&1; then
   compinit -u
 fi
 
+if [[ -r "${XDG_CONFIG_HOME:-$HOME/.config}/memsh/settings.zsh" ]]; then
+  source "${XDG_CONFIG_HOME:-$HOME/.config}/memsh/settings.zsh"
+fi
+
 : ${MEMSH_BIN:=memsh}
 : ${MEMSH_AUTOSUGGEST:=1}
 : ${MEMSH_AUTOSUGGEST_MIN_CHARS:=2}

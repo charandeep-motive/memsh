@@ -20,6 +20,7 @@ memsh destroy
 memsh delete "kubectl get pods"
 memsh record --command "kubectl get pods" --directory "$PWD" --exit-code 0
 memsh search --query "kubectl" --limit 5
+memsh settings
 memsh stats
 memsh doctor
 ```
@@ -42,6 +43,27 @@ You can change the number of suggestions shown by setting `MEMSH_MAX_SUGGESTIONS
 export MEMSH_MAX_SUGGESTIONS=10
 source ~/.config/memsh/memsh.zsh
 ```
+
+You can also manage persisted memsh settings with `memsh settings`:
+
+```sh
+memsh settings
+memsh settings set MEMSH_MAX_SUGGESTIONS 10
+memsh settings set MEMSH_AUTOSUGGEST 0
+memsh settings set MEMSH_AUTOSUGGEST_MIN_CHARS 3
+memsh settings set MEMSH_UI_WIDTH 110
+memsh settings set MEMSH_UI_MAX_ITEMS 12
+memsh settings unset MEMSH_UI_WIDTH
+source ~/.zshrc
+```
+
+Supported settings:
+
+- `MEMSH_AUTOSUGGEST`: enable or disable suggestions while typing
+- `MEMSH_AUTOSUGGEST_MIN_CHARS`: minimum typed characters before autosuggest starts
+- `MEMSH_MAX_SUGGESTIONS`: maximum suggestions returned by search flows
+- `MEMSH_UI_WIDTH`: preferred interactive picker width
+- `MEMSH_UI_MAX_ITEMS`: maximum visible items in the interactive picker
 
 memsh only saves commands whose exit code is `0`, so failed commands and common typos do not pollute the suggestion database.
 

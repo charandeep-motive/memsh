@@ -84,6 +84,56 @@ func TestRunHelpPrintsUsage(t *testing.T) {
 	if !strings.Contains(output, "memsh destroy") {
 		t.Fatalf("help output missing destroy usage: %q", output)
 	}
+
+	if !strings.Contains(output, "memsh settings") {
+		t.Fatalf("help output missing settings usage: %q", output)
+	}
+}
+
+func TestRunSettingsSetAndUnset(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	var output bytes.Buffer
+	if err := runSettings([]string{"set", "MEMSH_MAX_SUGGESTIONS", "9"}, &output); err != nil {
+		t.Fatalf("run settings set: %v", err)
+	}
+
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		t.Fatalf("resolve paths: %v", err)
+	}
+
+	content, err := os.ReadFile(paths.SettingsPath)
+	if err != nil {
+		t.Fatalf("read settings file: %v", err)
+	}
+	if !strings.Contains(string(content), `export MEMSH_MAX_SUGGESTIONS="9"`) {
+		t.Fatalf("settings file missing saved value: %q", string(content))
+	}
+
+	output.Reset()
+	if err := runSettings([]string{"unset", "MEMSH_MAX_SUGGESTIONS"}, &output); err != nil {
+		t.Fatalf("run settings unset: %v", err)
+	}
+
+	content, err = os.ReadFile(paths.SettingsPath)
+	if err != nil {
+		t.Fatalf("read settings file after unset: %v", err)
+	}
+	if strings.Contains(string(content), "MEMSH_MAX_SUGGESTIONS") {
+		t.Fatalf("settings file still contains removed key: %q", string(content))
+	}
+}
+
+func TestRunSettingsRejectsInvalidValue(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	err := runSettings([]string{"set", "MEMSH_AUTOSUGGEST", "yes"}, io.Discard)
+	if err == nil {
+		t.Fatal("expected invalid settings value error")
+	}
 }
 
 func TestRunClearPrunesLeastUsedCommands(t *testing.T) {
