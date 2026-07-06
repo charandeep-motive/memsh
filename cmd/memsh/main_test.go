@@ -286,26 +286,6 @@ func TestRunDestroyCancelled(t *testing.T) {
 	}
 }
 
-func TestDefaultSuggestionLimitFromEnv(t *testing.T) {
-	t.Setenv("MEMSH_MAX_SUGGESTIONS", "9")
-
-	if got := defaultSuggestionLimit(); got != 9 {
-		t.Fatalf("defaultSuggestionLimit() = %d, want 9", got)
-	}
-}
-
-func TestDefaultSuggestionLimitFallsBack(t *testing.T) {
-	t.Setenv("MEMSH_MAX_SUGGESTIONS", "0")
-	if got := defaultSuggestionLimit(); got != 5 {
-		t.Fatalf("defaultSuggestionLimit() with zero = %d, want 5", got)
-	}
-
-	t.Setenv("MEMSH_MAX_SUGGESTIONS", "bad")
-	if got := defaultSuggestionLimit(); got != 5 {
-		t.Fatalf("defaultSuggestionLimit() with invalid env = %d, want 5", got)
-	}
-}
-
 func captureStdout(runFunc func() error) (string, error) {
 	originalStdout := os.Stdout
 	reader, writer, err := os.Pipe()
