@@ -129,15 +129,22 @@ func (m pickerModel) View() string {
 
 	lines := []string{titleStyle.Render(m.title), "", inputLine, helpStyle.Render(separator), ""}
 
+	// Interior width for a rendered row: box width minus border (2),
+	// padding (2 each side) and the 2-space indent prefix.
+	rowWidth := max(10, availableWidth-2-4-2)
+
 	visibleItems := m.visibleCommands()
 	if len(visibleItems) == 0 {
 		lines = append(lines, emptyStyle.Render("No matching commands"))
 	} else {
 		for _, item := range visibleItems {
 			if item.index == m.cursor {
+				// Focused row shows the full command, wrapped as needed.
 				lines = append(lines, selectedStyle.Render("  "+item.command))
 			} else {
-				lines = append(lines, normalStyle.Render("  "+item.command))
+				// Non-focused rows collapse to a single line so long
+				// commands don't wrap and break the layout.
+				lines = append(lines, normalStyle.Render("  "+truncate(item.command, rowWidth)))
 			}
 		}
 	}
@@ -188,6 +195,33 @@ func (m pickerModel) visibleCommands() []visibleCommand {
 		items = append(items, visibleCommand{index: index, command: m.filtered[index]})
 	}
 	return items
+}
+
+// truncate collapses a command to a single line no wider than w display
+// cells, appending an ellipsis when content is cut. A command spanning
+// multiple lines is reduced to its first line before width truncation.
+func truncate(s string, w int) string {
+	if w < 1 {
+		w = 1
+	}
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		s = s[:idx]
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+
+	runes := []rune(s)
+	limit := max(0, w-1)
+	cut := ""
+	for i := 0; i < len(runes); i++ {
+		candidate := cut + string(runes[i])
+		if lipgloss.Width(candidate) > limit {
+			break
+		}
+		cut = candidate
+	}
+	return cut + "…"
 }
 
 func min(a int, b int) int {
