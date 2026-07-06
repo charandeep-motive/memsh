@@ -10,7 +10,7 @@ import (
 	"github.com/charandeep-motive/memsh/internal/record"
 )
 
-func TestStoreUpsertsFrequency(t *testing.T) {
+func TestStoreUpsertsFrequencyPerDirectory(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -20,50 +20,58 @@ func TestStoreUpsertsFrequency(t *testing.T) {
 	firstUse := time.Unix(1_700_000_000, 0)
 	secondUse := firstUse.Add(time.Hour)
 
-	if err := record.Store(ctx, database, record.Entry{
-		Command:   "git status",
-		Directory: "/tmp/project-a",
-		ExitCode:  0,
-		UsedAt:    firstUse,
-	}); err != nil {
-		t.Fatalf("store first command: %v", err)
+	// Same command in the same directory bumps that directory's frequency.
+	for _, usedAt := range []time.Time{firstUse, secondUse} {
+		if err := record.Store(ctx, database, record.Entry{
+			Command:   "git status",
+			Directory: "/tmp/project-a",
+			ExitCode:  0,
+			UsedAt:    usedAt,
+		}); err != nil {
+			t.Fatalf("store command in project-a: %v", err)
+		}
 	}
 
+	// Same command in a different directory is tracked as its own row.
 	if err := record.Store(ctx, database, record.Entry{
 		Command:   "git status",
 		Directory: "/tmp/project-b",
 		ExitCode:  0,
 		UsedAt:    secondUse,
 	}); err != nil {
-		t.Fatalf("store duplicate command: %v", err)
+		t.Fatalf("store command in project-b: %v", err)
 	}
 
-	var frequency int
-	var lastUsed int64
-	var directory string
-	var exitCode int
+	var rowCount int
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM commands WHERE command = ?`, "git status").Scan(&rowCount); err != nil {
+		t.Fatalf("count rows: %v", err)
+	}
+	if rowCount != 2 {
+		t.Fatalf("row count = %d, want 2 (one per directory)", rowCount)
+	}
+
+	var frequencyA int
+	var lastUsedA int64
 	if err := database.QueryRowContext(ctx, `
-		SELECT frequency, last_used, directory, exit_code
-		FROM commands
-		WHERE command = ?
-	`, "git status").Scan(&frequency, &lastUsed, &directory, &exitCode); err != nil {
-		t.Fatalf("query stored row: %v", err)
+		SELECT frequency, last_used FROM commands WHERE command = ? AND directory = ?
+	`, "git status", "/tmp/project-a").Scan(&frequencyA, &lastUsedA); err != nil {
+		t.Fatalf("query project-a row: %v", err)
+	}
+	if frequencyA != 2 {
+		t.Fatalf("project-a frequency = %d, want 2", frequencyA)
+	}
+	if lastUsedA != secondUse.Unix() {
+		t.Fatalf("project-a last_used = %d, want %d", lastUsedA, secondUse.Unix())
 	}
 
-	if frequency != 2 {
-		t.Fatalf("frequency = %d, want 2", frequency)
+	var frequencyB int
+	if err := database.QueryRowContext(ctx, `
+		SELECT frequency FROM commands WHERE command = ? AND directory = ?
+	`, "git status", "/tmp/project-b").Scan(&frequencyB); err != nil {
+		t.Fatalf("query project-b row: %v", err)
 	}
-
-	if lastUsed != secondUse.Unix() {
-		t.Fatalf("last_used = %d, want %d", lastUsed, secondUse.Unix())
-	}
-
-	if directory != "/tmp/project-b" {
-		t.Fatalf("directory = %q, want /tmp/project-b", directory)
-	}
-
-	if exitCode != 0 {
-		t.Fatalf("exit_code = %d, want 0", exitCode)
+	if frequencyB != 1 {
+		t.Fatalf("project-b frequency = %d, want 1", frequencyB)
 	}
 }
 

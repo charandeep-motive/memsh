@@ -64,6 +64,19 @@ Supported settings:
 - `MEMSH_MAX_SUGGESTIONS`: maximum suggestions returned by search flows
 - `MEMSH_UI_WIDTH`: preferred interactive picker width
 - `MEMSH_UI_MAX_ITEMS`: maximum visible items in the interactive picker
+- `MEMSH_ENABLE_DIRECTORY_AWARENESS`: rank commands used in the current directory first
+
+## Directory awareness
+
+By default suggestions are ranked globally across all directories. Enable directory awareness to surface commands you've run in the current directory first, falling back to global suggestions:
+
+```sh
+memsh settings set MEMSH_ENABLE_DIRECTORY_AWARENESS 1
+memsh settings unset MEMSH_ENABLE_DIRECTORY_AWARENESS  # back to global
+source ~/.zshrc
+```
+
+memsh always records the directory a command ran in, so enabling this later works retroactively.
 
 memsh only saves commands whose exit code is `0`, so failed commands and common typos do not pollute the suggestion database.
 

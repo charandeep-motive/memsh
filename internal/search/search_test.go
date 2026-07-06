@@ -71,6 +71,56 @@ func TestFindRanksPrefixAndLimitsResults(t *testing.T) {
 	}
 }
 
+func TestFindDirectoryAwarePrefersCurrentDirectory(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	database := openStore(t)
+	defer database.Close()
+
+	now := time.Unix(1_700_000_500, 0)
+
+	// A frequent, recent match used in another directory.
+	for range 8 {
+		if err := record.Store(ctx, database, record.Entry{
+			Command:   "kubectl get pods",
+			Directory: "/other",
+			ExitCode:  0,
+			UsedAt:    now.Add(-10 * time.Minute),
+		}); err != nil {
+			t.Fatalf("store other-dir command: %v", err)
+		}
+	}
+
+	// A single, older match used in the current directory.
+	if err := record.Store(ctx, database, record.Entry{
+		Command:   "kubectl get svc",
+		Directory: "/cwd",
+		ExitCode:  0,
+		UsedAt:    now.Add(-6 * time.Hour),
+	}); err != nil {
+		t.Fatalf("store cwd command: %v", err)
+	}
+
+	// Global mode: the frequent, recent command wins.
+	global, err := search.Find(ctx, database, search.Query{Text: "kubectl", Directory: "/cwd", Limit: 5, Now: now})
+	if err != nil {
+		t.Fatalf("find global: %v", err)
+	}
+	if len(global) == 0 || global[0].Command != "kubectl get pods" {
+		t.Fatalf("global top = %+v, want 'kubectl get pods'", global)
+	}
+
+	// Directory-aware mode: the current-directory command is lifted to the top.
+	aware, err := search.Find(ctx, database, search.Query{Text: "kubectl", Directory: "/cwd", Limit: 5, Now: now, DirectoryAware: true})
+	if err != nil {
+		t.Fatalf("find dir-aware: %v", err)
+	}
+	if len(aware) == 0 || aware[0].Command != "kubectl get svc" {
+		t.Fatalf("dir-aware top = %+v, want 'kubectl get svc'", aware)
+	}
+}
+
 func openStore(t *testing.T) *db.Store {
 	t.Helper()
 

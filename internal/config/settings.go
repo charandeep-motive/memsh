@@ -61,6 +61,13 @@ var settingSpecs = []SettingSpec{
 			return validateMinIntSetting(value, 3)
 		},
 	},
+	{
+		Key:         "MEMSH_ENABLE_DIRECTORY_AWARENESS",
+		Default:     "0",
+		Description: "Rank commands used in the current directory first",
+		ValueHint:   "0|1",
+		Validator:   validateBoolSetting,
+	},
 }
 
 func SupportedSettings() []SettingSpec {

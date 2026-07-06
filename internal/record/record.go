@@ -38,10 +38,9 @@ func Store(ctx context.Context, database *db.Store, entry Entry) error {
 	_, err := database.ExecContext(ctx, `
 		INSERT INTO commands (command, frequency, last_used, directory, exit_code)
 		VALUES (?, 1, ?, ?, ?)
-		ON CONFLICT(command) DO UPDATE SET
+		ON CONFLICT(command, directory) DO UPDATE SET
 			frequency = commands.frequency + 1,
 			last_used = excluded.last_used,
-			directory = excluded.directory,
 			exit_code = excluded.exit_code
 	`, command, usedAt.Unix(), entry.Directory, entry.ExitCode)
 	if err != nil {

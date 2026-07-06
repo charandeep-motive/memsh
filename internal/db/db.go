@@ -21,13 +21,38 @@ type Stats struct {
 	TopCommands    []string
 }
 
-func ListCommands(ctx context.Context, store *Store, limit int) ([]string, error) {
-	query := `
-		SELECT command
-		FROM commands
-		ORDER BY frequency DESC, last_used DESC
-	`
-	args := []any{}
+// ListCommands returns distinct commands ordered for the picker. In global
+// mode commands are ranked by total frequency and recency across all
+// directories. When directoryAware is set and a directory is provided,
+// commands used in that directory rank first (by their in-directory
+// frequency and recency), followed by everything else as a global fallback.
+func ListCommands(ctx context.Context, store *Store, limit int, directory string, directoryAware bool) ([]string, error) {
+	var query string
+	var args []any
+
+	if directoryAware && directory != "" {
+		query = `
+			SELECT command
+			FROM commands
+			GROUP BY command
+			ORDER BY MAX(CASE WHEN directory = ? THEN 1 ELSE 0 END) DESC,
+				CASE WHEN MAX(CASE WHEN directory = ? THEN 1 ELSE 0 END) = 1
+					THEN MAX(CASE WHEN directory = ? THEN frequency END)
+					ELSE SUM(frequency) END DESC,
+				CASE WHEN MAX(CASE WHEN directory = ? THEN 1 ELSE 0 END) = 1
+					THEN MAX(CASE WHEN directory = ? THEN last_used END)
+					ELSE MAX(last_used) END DESC
+		`
+		args = []any{directory, directory, directory, directory, directory}
+	} else {
+		query = `
+			SELECT command
+			FROM commands
+			GROUP BY command
+			ORDER BY SUM(frequency) DESC, MAX(last_used) DESC
+		`
+	}
+
 	if limit > 0 {
 		query += ` LIMIT ?`
 		args = append(args, limit)
@@ -139,12 +164,60 @@ func Open(ctx context.Context, databasePath string) (*Store, error) {
 		return nil, fmt.Errorf("set busy timeout: %w", err)
 	}
 
-	if _, err := database.ExecContext(ctx, schema); err != nil {
+	if err := migrate(ctx, database); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("initialize schema: %w", err)
 	}
 
 	return &Store{DB: database}, nil
+}
+
+// migrate brings the database up to the current schemaVersion, preserving
+// existing rows. Fresh databases get the latest schema directly; legacy
+// databases (UNIQUE on command alone) are rebuilt into the composite
+// (command, directory) key. Progress is tracked via PRAGMA user_version.
+func migrate(ctx context.Context, database *sql.DB) error {
+	var userVersion int
+	if err := database.QueryRowContext(ctx, "PRAGMA user_version;").Scan(&userVersion); err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+
+	if userVersion >= schemaVersion {
+		// Already current; ensure the table exists for brand-new files.
+		if _, err := database.ExecContext(ctx, schema); err != nil {
+			return fmt.Errorf("ensure schema: %w", err)
+		}
+		return nil
+	}
+
+	var tableExists int
+	if err := database.QueryRowContext(ctx,
+		"SELECT count(*) FROM sqlite_master WHERE type='table' AND name='commands';",
+	).Scan(&tableExists); err != nil {
+		return fmt.Errorf("inspect schema: %w", err)
+	}
+
+	tx, err := database.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration: %w", err)
+	}
+	defer tx.Rollback()
+
+	if tableExists == 0 {
+		if _, err := tx.ExecContext(ctx, schema); err != nil {
+			return fmt.Errorf("create schema: %w", err)
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, migrateToCompositeKey); err != nil {
+			return fmt.Errorf("migrate to composite key: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d;", schemaVersion)); err != nil {
+		return fmt.Errorf("set schema version: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func ReadStats(ctx context.Context, store *Store) (Stats, error) {
@@ -154,12 +227,15 @@ func ReadStats(ctx context.Context, store *Store) (Stats, error) {
 		return Stats{}, fmt.Errorf("read total records: %w", err)
 	}
 
-	stats.UniqueCommands = stats.TotalRecords
+	if err := store.QueryRowContext(ctx, `SELECT COUNT(DISTINCT command) FROM commands`).Scan(&stats.UniqueCommands); err != nil {
+		return Stats{}, fmt.Errorf("read unique commands: %w", err)
+	}
 
 	rows, err := store.QueryContext(ctx, `
 		SELECT command
 		FROM commands
-		ORDER BY frequency DESC, last_used DESC
+		GROUP BY command
+		ORDER BY SUM(frequency) DESC, MAX(last_used) DESC
 		LIMIT 5
 	`)
 	if err != nil {

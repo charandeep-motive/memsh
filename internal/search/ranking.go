@@ -14,7 +14,14 @@ type Candidate struct {
 	ExitCode  int
 }
 
-func Score(candidate Candidate, query string, cwd string, now time.Time) float64 {
+// directoryMatchBonus is added when directory awareness is enabled and a
+// candidate was used in the current directory. It is large enough to lift
+// current-directory commands above unrelated global commands regardless of
+// their frequency or recency, while candidates within the directory still
+// order among themselves by the usual signals.
+const directoryMatchBonus = 40
+
+func Score(candidate Candidate, query string, cwd string, now time.Time, directoryAware bool) float64 {
 	trimmedQuery := strings.ToLower(strings.TrimSpace(query))
 	command := strings.ToLower(candidate.Command)
 
@@ -32,8 +39,8 @@ func Score(candidate Candidate, query string, cwd string, now time.Time) float64
 		score += 4
 	}
 
-	if cwd != "" && candidate.Directory == cwd {
-		score += 2
+	if directoryAware && cwd != "" && candidate.Directory == cwd {
+		score += directoryMatchBonus
 	}
 
 	return score

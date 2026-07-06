@@ -128,10 +128,11 @@ func runSearch(ctx context.Context, args []string) error {
 	defer database.Close()
 
 	results, err := search.Find(ctx, database, search.Query{
-		Text:      *query,
-		Directory: *cwd,
-		Limit:     *limit,
-		Now:       time.Now(),
+		Text:           *query,
+		Directory:      *cwd,
+		Limit:          *limit,
+		Now:            time.Now(),
+		DirectoryAware: directoryAwarenessEnabled(),
 	})
 	if err != nil {
 		return err
@@ -373,7 +374,15 @@ func runInteractivePicker(ctx context.Context, output io.Writer, initialQuery st
 	}
 	defer database.Close()
 
-	commands, err := db.ListCommands(ctx, database, 0)
+	directoryAware := directoryAwarenessEnabled()
+	cwd := ""
+	if directoryAware {
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			cwd = wd
+		}
+	}
+
+	commands, err := db.ListCommands(ctx, database, 0, cwd, directoryAware)
 	if err != nil {
 		return err
 	}
@@ -423,6 +432,9 @@ Usage:
   memsh settings set MEMSH_MAX_SUGGESTIONS 10
 	Persist a memsh setting under ~/.config/memsh/settings.zsh
 
+  memsh settings set MEMSH_ENABLE_DIRECTORY_AWARENESS 1
+	Rank commands used in the current directory first (unset to disable)
+
   memsh pick --query "git"
 	Open the interactive picker with a pre-filled query
 
@@ -463,6 +475,10 @@ func defaultSuggestionLimit() int {
 	}
 
 	return limit
+}
+
+func directoryAwarenessEnabled() bool {
+	return strings.TrimSpace(os.Getenv("MEMSH_ENABLE_DIRECTORY_AWARENESS")) == "1"
 }
 
 func confirmAction(input io.Reader, output io.Writer, prompt string) (bool, error) {

@@ -11,10 +11,11 @@ import (
 )
 
 type Query struct {
-	Text      string
-	Directory string
-	Limit     int
-	Now       time.Time
+	Text           string
+	Directory      string
+	Limit          int
+	Now            time.Time
+	DirectoryAware bool
 }
 
 type Result struct {
@@ -41,12 +42,22 @@ func Find(ctx context.Context, database *db.Store, query Query) ([]Result, error
 		now = time.Now()
 	}
 
+	// Rows are keyed by (command, directory), so aggregate to one candidate
+	// per command. cwd-specific frequency and recency are computed alongside
+	// the global totals so directory-aware ranking can prefer the current
+	// directory without a second query.
 	rows, err := database.QueryContext(ctx, `
-		SELECT command, frequency, last_used, directory, exit_code
+		SELECT command,
+			SUM(frequency) AS total_freq,
+			MAX(last_used) AS recent,
+			MAX(CASE WHEN directory = ? THEN 1 ELSE 0 END) AS in_cwd,
+			COALESCE(MAX(CASE WHEN directory = ? THEN frequency END), 0) AS cwd_freq,
+			COALESCE(MAX(CASE WHEN directory = ? THEN last_used END), 0) AS cwd_recent
 		FROM commands
 		WHERE lower(command) LIKE '%' || lower(?) || '%'
-		LIMIT 100
-	`, trimmed)
+		GROUP BY command
+		LIMIT 200
+	`, query.Directory, query.Directory, query.Directory, trimmed)
 	if err != nil {
 		return nil, fmt.Errorf("search commands: %w", err)
 	}
@@ -54,16 +65,26 @@ func Find(ctx context.Context, database *db.Store, query Query) ([]Result, error
 
 	results := make([]Result, 0, limit)
 	for rows.Next() {
-		var candidate Candidate
-		var lastUsed int64
-		if err := rows.Scan(&candidate.Command, &candidate.Frequency, &lastUsed, &candidate.Directory, &candidate.ExitCode); err != nil {
+		var command string
+		var totalFreq, recent, inCwd, cwdFreq, cwdRecent int64
+		if err := rows.Scan(&command, &totalFreq, &recent, &inCwd, &cwdFreq, &cwdRecent); err != nil {
 			return nil, fmt.Errorf("scan candidate: %w", err)
 		}
 
-		candidate.LastUsed = time.Unix(lastUsed, 0)
+		candidate := Candidate{Command: command}
+		matchesCwd := query.DirectoryAware && query.Directory != "" && inCwd == 1
+		if matchesCwd {
+			candidate.Frequency = int(cwdFreq)
+			candidate.LastUsed = time.Unix(cwdRecent, 0)
+			candidate.Directory = query.Directory
+		} else {
+			candidate.Frequency = int(totalFreq)
+			candidate.LastUsed = time.Unix(recent, 0)
+		}
+
 		results = append(results, Result{
 			Command:   candidate.Command,
-			Score:     Score(candidate, trimmed, query.Directory, now),
+			Score:     Score(candidate, trimmed, query.Directory, now, query.DirectoryAware),
 			Frequency: candidate.Frequency,
 			LastUsed:  candidate.LastUsed,
 			Directory: candidate.Directory,
