@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>memsh — a local shell memory engine for macOS + zsh</title>
+<meta name="description" content="memsh records the shell commands you actually run and gives them back as ranked, directory-aware suggestions. Local-first, built in Go with SQLite." />
+<meta property="og:title" content="memsh" />
+<meta property="og:description" content="A local shell memory engine for macOS + zsh — ranked, directory-aware command suggestions." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8C%98%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-dim: #59636e;
+    --accent: #3b6ea8;
+    --accent-soft: #dce8f6;
+    --term-bg: #0d1117;
+    --term-text: #c9d1d9;
+    --term-blue: #87afff;
+    --term-teal: #87afd7;
+    --term-dim: #6e7681;
+    --term-sel-bg: #2d333b;
+    --radius: 12px;
+    --maxw: 960px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --bg-alt: #161b22;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #9198a1;
+      --accent: #87afff;
+      --accent-soft: #1c2f4a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, kbd, .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header.nav {
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { font-weight: 700; font-size: 1.2rem; letter-spacing: -0.02em; }
+  .brand .dot { color: var(--accent); }
+  .nav-links { display: flex; gap: 22px; align-items: center; font-size: 0.95rem; }
+  .nav-links a { color: var(--text-dim); }
+  .nav-links a:hover { color: var(--text); text-decoration: none; }
+  @media (max-width: 620px) { .nav-links .hide-sm { display: none; } }
+
+  /* Hero */
+  .hero { padding: 72px 0 48px; }
+  .hero h1 {
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    line-height: 1.05; margin: 0 0 16px;
+    letter-spacing: -0.03em;
+  }
+  .hero h1 .accent { color: var(--accent); }
+  .hero p.lead { font-size: 1.2rem; color: var(--text-dim); max-width: 620px; margin: 0 0 28px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 36px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: 8px; font-weight: 600; font-size: 0.98rem;
+    border: 1px solid var(--border); cursor: pointer; transition: all .15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { filter: brightness(1.08); text-decoration: none; }
+  .btn-ghost { background: var(--surface); color: var(--text); }
+  .btn-ghost:hover { background: var(--bg-alt); text-decoration: none; }
+
+  /* Install command */
+  .install {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--term-bg); color: var(--term-text);
+    border-radius: 10px; padding: 14px 16px; font-size: 0.92rem;
+    overflow-x: auto; border: 1px solid #21262d;
+  }
+  .install code { white-space: nowrap; }
+  .install code .prompt { color: var(--term-teal); user-select: none; }
+  .copy-btn {
+    flex: none; background: #21262d; color: var(--term-text);
+    border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px;
+    cursor: pointer; font-size: 0.82rem; font-family: inherit;
+  }
+  .copy-btn:hover { background: #30363d; }
+
+  /* Terminal mockup */
+  .term {
+    background: var(--term-bg); border-radius: var(--radius);
+    border: 1px solid #21262d; overflow: hidden; margin-top: 40px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.28);
+  }
+  .term-bar { display: flex; gap: 8px; padding: 12px 14px; background: #161b22; border-bottom: 1px solid #21262d; }
+  .term-bar span { width: 12px; height: 12px; border-radius: 50%; }
+  .term-bar .r { background: #ff5f56; } .term-bar .y { background: #ffbd2e; } .term-bar .g { background: #27c93f; }
+  .term-body { padding: 18px 20px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88rem; color: var(--term-text); line-height: 1.7; }
+  .term-body .box-title { color: var(--term-blue); font-weight: 700; }
+  .term-body .prompt { color: var(--term-teal); font-weight: 700; }
+  .term-body .cursor { background: var(--term-text); color: var(--term-bg); }
+  .term-body .rule { color: var(--term-dim); }
+  .term-body .sel { background: var(--term-sel-bg); color: #fff; display: inline-block; width: 100%; }
+  .term-body .item { color: #adbac7; display: block; }
+  .term-body .hint { color: var(--term-dim); }
+
+  /* Sections */
+  section { padding: 56px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 1.8rem; letter-spacing: -0.02em; margin: 0 0 8px; }
+  section > .wrap > p.section-lead { color: var(--text-dim); margin: 0 0 32px; max-width: 640px; }
+
+  /* Features */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px;
+  }
+  .card .ico { font-size: 1.5rem; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 6px; font-size: 1.08rem; }
+  .card p { margin: 0; color: var(--text-dim); font-size: 0.95rem; }
+
+  /* Steps */
+  .steps { counter-reset: step; display: grid; gap: 16px; }
+  .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: start; }
+  .step .num {
+    counter-increment: step; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700;
+    display: grid; place-items: center;
+  }
+  .step .num::before { content: counter(step); }
+  .step h3 { margin: 4px 0 4px; font-size: 1.05rem; }
+  .step p { margin: 0 0 8px; color: var(--text-dim); }
+  pre.code {
+    background: var(--term-bg); color: var(--term-text); border: 1px solid #21262d;
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 0.88rem; margin: 0;
+  }
+  pre.code .prompt { color: var(--term-teal); }
+  pre.code .cmt { color: var(--term-dim); }
+  kbd {
+    background: var(--bg-alt); border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 7px; font-size: 0.85em;
+  }
+
+  /* Settings table */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  th { background: var(--bg-alt); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td code { background: var(--bg-alt); padding: 2px 6px; border-radius: 5px; font-size: 0.9em; }
+  td .def { color: var(--text-dim); }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--border); padding: 40px 0; color: var(--text-dim); font-size: 0.92rem; }
+  .footer-inner { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <div class="brand">memsh<span class="dot">_</span></div>
+    <nav class="nav-links">
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#settings" class="hide-sm">Settings</a>
+      <a href="https://github.com/charandeep-motive/memsh">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="hero" style="border-top:none;">
+    <div class="wrap">
+      <h1>Your shell remembers.<br /><span class="accent">memsh</span> gives it back.</h1>
+      <p class="lead">
+        A local shell memory engine for macOS&nbsp;+&nbsp;zsh. It records the commands you
+        actually run and returns them as ranked, directory-aware suggestions — right where you type.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#quickstart">Get started →</a>
+        <a class="btn btn-ghost" href="https://github.com/charandeep-motive/memsh">View on GitHub</a>
+      </div>
+      <div class="install">
+        <code id="install-cmd"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git &amp;&amp; cd memsh &amp;&amp; ./install.sh</code>
+        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      </div>
+
+      <!-- Terminal mockup -->
+      <div class="term" aria-hidden="true">
+        <div class="term-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="term-body">
+<span class="box-title">memsh suggestions</span>
+
+<span class="prompt">memsh&gt; </span>&gt; prvw<span class="cursor">&nbsp;</span>
+
+<span class="rule">──────────────────────────────────────────────</span>
+<span class="sel">&nbsp;&nbsp;kubectl config use-context svcs--prvw--use1</span>
+<span class="item">&nbsp;&nbsp;kubectl config use-context svcs--prvw--cac1</span>
+<span class="item">&nbsp;&nbsp;kubectl edit deploy fleetcard--prvw--use1 …</span>
+<span class="item">&nbsp;&nbsp;aws ec2 describe-nat-gateways --region … …</span>
+<span class="item">&nbsp;&nbsp;git add k8s/cac1/prvw/values.yaml</span>
+
+<span class="hint">Type to filter, ↑/↓ to move, Enter to select, Esc to cancel</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="wrap">
+      <h2>What it does</h2>
+      <p class="section-lead">Small, fast, and local. No cloud, no telemetry — just a SQLite file on your machine.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="ico">🧠</div>
+          <h3>Learns as you work</h3>
+          <p>Every successful command is recorded automatically via a zsh hook — no manual bookmarking.</p>
+        </div>
+        <div class="card">
+          <div class="ico">📊</div>
+          <h3>Frequency + recency ranking</h3>
+          <p>Suggestions are scored by how often and how recently you've used them, so the useful ones rise.</p>
+        </div>
+        <div class="card">
+          <div class="ico">📁</div>
+          <h3>Directory awareness</h3>
+          <p>Opt in to surface commands you ran in the <em>current</em> directory first, with global as fallback.</p>
+        </div>
+        <div class="card">
+          <div class="ico">⌨️</div>
+          <h3>Interactive picker</h3>
+          <p>A styled fuzzy-search box inline in your prompt — <kbd>Ctrl-Space</kbd> or <kbd>↓</kbd> to open.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🔒</div>
+          <h3>Local-first</h3>
+          <p>Backed by SQLite in your XDG data dir. Your history never leaves your machine.</p>
+        </div>
+        <div class="card">
+          <div class="ico">✅</div>
+          <h3>Clean history</h3>
+          <p>Only exit-code&nbsp;0 commands are stored, so typos and failures never pollute your suggestions.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick start -->
+  <section id="quickstart">
+    <div class="wrap">
+      <h2>Quick start</h2>
+      <p class="section-lead">macOS + zsh. Three steps to a shell that remembers.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="num"></div>
+          <div>
+            <h3>Install</h3>
+            <p>Clone and run the installer. It builds the binary and drops the zsh plugin into place.</p>
+            <pre class="code"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git
+<span class="prompt">$ </span>cd memsh
+<span class="prompt">$ </span>./install.sh</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div>
+            <h3>Reload your shell</h3>
+            <p>Source your config so the plugin loads.</p>
+            <pre class="code"><span class="prompt">$ </span>source ~/.zshrc</pre>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num"></div>
+          <div>
+            <h3>Just type</h3>
+            <p>Start typing a command. Once you hit a couple of characters, memsh hints that suggestions
+              are ready — press <kbd>Ctrl-Space</kbd> or <kbd>↓</kbd> to open the picker, then <kbd>Enter</kbd> to accept.
+              Run <code>memsh</code> with no arguments any time to open the search box directly.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="settings">
+    <div class="wrap">
+      <h2>Settings</h2>
+      <p class="section-lead">
+        Tune behavior with <code>memsh settings set KEY VALUE</code> (persisted under
+        <code>~/.config/memsh/settings.zsh</code>), then <code>source ~/.zshrc</code>.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>MEMSH_AUTOSUGGEST</code></td>
+              <td><span class="def">1</span></td>
+              <td>Enable automatic suggestions while typing.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_AUTOSUGGEST_MIN_CHARS</code></td>
+              <td><span class="def">2</span></td>
+              <td>Minimum typed characters before autosuggest starts.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_MAX_SUGGESTIONS</code></td>
+              <td><span class="def">5</span></td>
+              <td>Maximum suggestions returned by search and shell flows.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_UI_WIDTH</code></td>
+              <td><span class="def">100</span></td>
+              <td>Preferred picker width in terminal columns.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_UI_MAX_ITEMS</code></td>
+              <td><span class="def">10</span></td>
+              <td>Maximum visible commands in the picker.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_ENABLE_DIRECTORY_AWARENESS</code></td>
+              <td><span class="def">0</span></td>
+              <td>Rank commands used in the current directory first.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <div>memsh — a local shell memory engine.</div>
+    <div><a href="https://github.com/charandeep-motive/memsh">github.com/charandeep-motive/memsh</a></div>
+  </div>
+</footer>
+
+<script>
+  function copyInstall(btn) {
+    var text = document.getElementById('install-cmd').innerText.replace(/^\$\s*/, '');
+    navigator.clipboard.writeText(text).then(function () {
+      var original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.textContent = original; }, 1600);
+    });
+  }
+</script>
+</body>
+</html>
