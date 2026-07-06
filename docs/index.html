@@ -283,9 +283,12 @@
           <div class="num"></div>
           <div>
             <h3>Install</h3>
-            <p>One command downloads the prebuilt binary and zsh plugin — no Go toolchain needed.</p>
+            <p><strong>Option A — curl (recommended).</strong> Downloads the prebuilt binary and zsh plugin for your architecture. No Go toolchain needed.</p>
             <pre class="code"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash</pre>
-            <p><span class="cmt">Prefer to build from source? Clone the repo and run <code>./install.sh</code>.</span></p>
+            <p style="margin-top:16px;"><strong>Option B — from source.</strong> Clone the repo and run the installer, which builds the binary with Go.</p>
+            <pre class="code"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git
+<span class="prompt">$ </span>cd memsh
+<span class="prompt">$ </span>./install.sh</pre>
           </div>
         </div>
         <div class="step">
