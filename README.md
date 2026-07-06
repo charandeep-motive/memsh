@@ -40,6 +40,8 @@ This downloads the prebuilt binary for your architecture and the zsh plugin, the
 Clone the repo and run the installer, which builds the binary with Go:
 
 ```sh
+git clone https://github.com/charandeep-motive/memsh.git
+cd memsh
 ./install.sh
 ```
 
