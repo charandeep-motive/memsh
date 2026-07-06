@@ -2,14 +2,19 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="charandeep-motive/memsh"
 
 INSTALL_BIN_DIR="${MEMSH_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 INSTALL_CONFIG_DIR="${MEMSH_INSTALL_CONFIG_DIR:-$HOME/.config/memsh}"
 ZSHRC_PATH="${MEMSH_ZSHRC:-$HOME/.zshrc}"
 
+# Best-effort directory of this script. Empty when piped via `curl | bash`,
+# which is exactly how we detect a remote install below.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
+
 MEMSH_BINARY_SOURCE=""
 MEMSH_PLUGIN_SOURCE=""
+TMP_DIR=""
 
 say() {
   printf '%s\n' "$*"
@@ -19,6 +24,13 @@ fail() {
   printf 'memsh install error: %s\n' "$*" >&2
   exit 1
 }
+
+cleanup() {
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
+trap cleanup EXIT
 
 append_if_missing() {
   local target_file="$1"
@@ -30,41 +42,62 @@ append_if_missing() {
   fi
 }
 
-resolve_binary_source() {
-  if [[ -f "$SCRIPT_DIR/go.mod" && -d "$SCRIPT_DIR/cmd/memsh" ]]; then
+detect_asset() {
+  local arch
+  arch="$(uname -m)"
+  case "$arch" in
+    arm64 | aarch64) echo "memsh-darwin-arm64" ;;
+    x86_64 | amd64) echo "memsh-darwin-amd64" ;;
+    *) fail "unsupported architecture: $arch" ;;
+  esac
+}
+
+download() {
+  local url="$1"
+  local dest="$2"
+  curl -fsSL "$url" -o "$dest" || fail "failed to download $url"
+}
+
+# resolve_from_source uses a local checkout: build with Go when available, or
+# fall back to an already-built binary in the tree. Returns non-zero when this
+# is not a checkout (e.g. the script was piped via curl).
+resolve_from_source() {
+  if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/go.mod" && -d "$SCRIPT_DIR/cmd/memsh" ]]; then
     command -v go >/dev/null 2>&1 || fail "Go is required to build memsh from source"
     say "Building memsh binary..."
     mkdir -p "$SCRIPT_DIR/bin"
     go build -o "$SCRIPT_DIR/bin/memsh" "$SCRIPT_DIR/cmd/memsh"
     MEMSH_BINARY_SOURCE="$SCRIPT_DIR/bin/memsh"
-    return
+    MEMSH_PLUGIN_SOURCE="$SCRIPT_DIR/shell/memsh.zsh"
+    return 0
   fi
 
-  if [[ -x "$SCRIPT_DIR/bin/memsh" ]]; then
+  if [[ -n "$SCRIPT_DIR" && -x "$SCRIPT_DIR/bin/memsh" && -f "$SCRIPT_DIR/shell/memsh.zsh" ]]; then
     MEMSH_BINARY_SOURCE="$SCRIPT_DIR/bin/memsh"
-    return
+    MEMSH_PLUGIN_SOURCE="$SCRIPT_DIR/shell/memsh.zsh"
+    return 0
   fi
 
-  if [[ -x "$SCRIPT_DIR/memsh" ]]; then
-    MEMSH_BINARY_SOURCE="$SCRIPT_DIR/memsh"
-    return
-  fi
-
-  fail "could not find a memsh binary or source tree"
+  return 1
 }
 
-resolve_plugin_source() {
-  if [[ -f "$SCRIPT_DIR/memsh.zsh" ]]; then
-    MEMSH_PLUGIN_SOURCE="$SCRIPT_DIR/memsh.zsh"
-    return
-  fi
+# resolve_from_release downloads the prebuilt binary and plugin for the current
+# architecture from the latest GitHub release.
+resolve_from_release() {
+  command -v curl >/dev/null 2>&1 || fail "curl is required to download memsh"
 
-  if [[ -f "$SCRIPT_DIR/shell/memsh.zsh" ]]; then
-    MEMSH_PLUGIN_SOURCE="$SCRIPT_DIR/shell/memsh.zsh"
-    return
-  fi
+  local asset base
+  asset="$(detect_asset)"
+  base="https://github.com/$REPO/releases/latest/download"
 
-  fail "could not find memsh.zsh"
+  TMP_DIR="$(mktemp -d)"
+  say "Downloading latest memsh release ($asset)..."
+  download "$base/$asset" "$TMP_DIR/memsh"
+  download "$base/memsh.zsh" "$TMP_DIR/memsh.zsh"
+  chmod +x "$TMP_DIR/memsh"
+
+  MEMSH_BINARY_SOURCE="$TMP_DIR/memsh"
+  MEMSH_PLUGIN_SOURCE="$TMP_DIR/memsh.zsh"
 }
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -75,8 +108,9 @@ if ! command -v zsh >/dev/null 2>&1; then
   fail "zsh is required"
 fi
 
-resolve_binary_source
-resolve_plugin_source
+if ! resolve_from_source; then
+  resolve_from_release
+fi
 
 mkdir -p "$INSTALL_BIN_DIR" "$INSTALL_CONFIG_DIR"
 install "$MEMSH_BINARY_SOURCE" "$INSTALL_BIN_DIR/memsh"

@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build macOS binaries
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            GOOS=darwin GOARCH="$arch" go build \
+              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -o "dist/memsh-darwin-${arch}" ./cmd/memsh
+          done
+          cp shell/memsh.zsh dist/memsh.zsh
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/memsh-darwin-amd64
+            dist/memsh-darwin-arm64
+            dist/memsh.zsh
+          generate_release_notes: true

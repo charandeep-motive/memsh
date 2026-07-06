@@ -25,7 +25,19 @@ memsh stats
 memsh doctor
 ```
 
-## Local install
+## Install
+
+Install the latest release (macOS + zsh, no Go toolchain required):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash
+```
+
+This downloads the prebuilt binary for your architecture and the zsh plugin, then wires them into `~/.zshrc`.
+
+### From source
+
+Clone the repo and run the installer, which builds the binary with Go:
 
 ```sh
 ./install.sh

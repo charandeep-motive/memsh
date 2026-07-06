@@ -208,7 +208,7 @@
         <a class="btn btn-ghost" href="https://github.com/charandeep-motive/memsh">View on GitHub</a>
       </div>
       <div class="install">
-        <code id="install-cmd"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git &amp;&amp; cd memsh &amp;&amp; ./install.sh</code>
+        <code id="install-cmd"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash</code>
         <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
       </div>
 
@@ -283,10 +283,9 @@
           <div class="num"></div>
           <div>
             <h3>Install</h3>
-            <p>Clone and run the installer. It builds the binary and drops the zsh plugin into place.</p>
-            <pre class="code"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git
-<span class="prompt">$ </span>cd memsh
-<span class="prompt">$ </span>./install.sh</pre>
+            <p>One command downloads the prebuilt binary and zsh plugin — no Go toolchain needed.</p>
+            <pre class="code"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash</pre>
+            <p><span class="cmt">Prefer to build from source? Clone the repo and run <code>./install.sh</code>.</span></p>
           </div>
         </div>
         <div class="step">
