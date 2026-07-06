@@ -218,14 +218,14 @@
         <div class="term-body">
 <span class="box-title">memsh suggestions</span>
 
-<span class="prompt">memsh&gt; </span>&gt; docker<span class="cursor">&nbsp;</span>
+<span class="prompt">memsh&gt; </span>&gt; log<span class="cursor">&nbsp;</span>
 
 <span class="rule">──────────────────────────────────────────────</span>
-<span class="sel">&nbsp;&nbsp;docker compose up -d</span>
+<span class="sel">&nbsp;&nbsp;git log --oneline --graph -15</span>
 <span class="item">&nbsp;&nbsp;docker compose logs -f web</span>
-<span class="item">&nbsp;&nbsp;docker build -t myapp:latest .</span>
-<span class="item">&nbsp;&nbsp;docker ps --format "table {{.Names}}\t{{.Status}}"</span>
-<span class="item">&nbsp;&nbsp;docker image prune -f</span>
+<span class="item">&nbsp;&nbsp;kubectl logs -f deploy/api</span>
+<span class="item">&nbsp;&nbsp;tail -f /var/log/system.log</span>
+<span class="item">&nbsp;&nbsp;less +F build.log</span>
 
 <span class="hint">Type to filter, ↑/↓ to move, Enter to select, Esc to cancel</span>
         </div>
