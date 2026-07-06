@@ -89,7 +89,7 @@
     .install { font-size: 0.8rem; padding: 12px; }
     .term { margin-top: 28px; }
     .term-body { font-size: 0.72rem; padding: 14px; line-height: 1.6; }
-    .step { grid-template-columns: 28px 1fr; gap: 12px; }
+    .step { grid-template-columns: 28px minmax(0, 1fr); gap: 12px; }
     pre.code { font-size: 0.78rem; }
   }
 
@@ -164,7 +164,8 @@
 
   /* Steps */
   .steps { counter-reset: step; display: grid; gap: 16px; }
-  .step { display: grid; grid-template-columns: 40px 1fr; gap: 16px; align-items: start; }
+  .step { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .step > div { min-width: 0; }
   .step .num {
     counter-increment: step; width: 34px; height: 34px; border-radius: 50%;
     background: var(--accent-soft); color: var(--accent); font-weight: 700;
