@@ -11,21 +11,35 @@ import (
 	"github.com/charandeep-motive/memsh/internal/config"
 )
 
-type pickerModel struct {
-	title       string
-	help        string
-	input       textinput.Model
-	allCommands []string
-	filtered    []string
-	cursor      int
-	selected    string
-	width       int
-	height      int
-	quitting    bool
-	cancelled   bool
+// PickerItem pairs a display string (shown and searched in the UI) with the
+// underlying value returned on selection. When Value is empty, Display is used.
+type PickerItem struct {
+	Display string
+	Value   string
 }
 
-func RunCommandPicker(title string, commands []string, initialQuery string, output io.Writer) (string, error) {
+func (p PickerItem) value() string {
+	if p.Value != "" {
+		return p.Value
+	}
+	return p.Display
+}
+
+type pickerModel struct {
+	title     string
+	help      string
+	input     textinput.Model
+	allItems  []PickerItem
+	filtered  []PickerItem
+	cursor    int
+	selected  string
+	width     int
+	height    int
+	quitting  bool
+	cancelled bool
+}
+
+func RunCommandPicker(title string, items []PickerItem, initialQuery string, output io.Writer) (string, error) {
 	input := textinput.New()
 	input.Placeholder = "Search commands"
 	input.SetValue(initialQuery)
@@ -34,12 +48,12 @@ func RunCommandPicker(title string, commands []string, initialQuery string, outp
 	input.Width = 50
 
 	model := pickerModel{
-		title:       title,
-		help:        "Type to filter, Up/Down to move, Enter to select, Esc to cancel",
-		input:       input,
-		allCommands: commands,
+		title:    title,
+		help:     "Type to filter, Up/Down to move, Enter to select, Esc to cancel",
+		input:    input,
+		allItems: items,
 	}
-	model.filtered = model.filterCommands()
+	model.filtered = model.filterItems()
 
 	program := tea.NewProgram(model, tea.WithOutput(output))
 	finalModel, err := program.Run()
@@ -78,7 +92,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filtered) == 0 {
 				return m, nil
 			}
-			m.selected = m.filtered[m.cursor]
+			m.selected = m.filtered[m.cursor].value()
 			m.quitting = true
 			return m, tea.Quit
 		case "up", "ctrl+p":
@@ -96,7 +110,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
-	m.filtered = m.filterCommands()
+	m.filtered = m.filterItems()
 	if m.cursor >= len(m.filtered) {
 		m.cursor = max(0, len(m.filtered)-1)
 	}
@@ -139,12 +153,9 @@ func (m pickerModel) View() string {
 	} else {
 		for _, item := range visibleItems {
 			if item.index == m.cursor {
-				// Focused row shows the full command, wrapped as needed.
-				lines = append(lines, selectedStyle.Render("  "+item.command))
+				lines = append(lines, selectedStyle.Render("  "+item.item.Display))
 			} else {
-				// Non-focused rows collapse to a single line so long
-				// commands don't wrap and break the layout.
-				lines = append(lines, normalStyle.Render("  "+truncate(item.command, rowWidth)))
+				lines = append(lines, normalStyle.Render("  "+truncate(item.item.Display, rowWidth)))
 			}
 		}
 	}
@@ -154,24 +165,24 @@ func (m pickerModel) View() string {
 	return lipgloss.NewStyle().Width(max(availableWidth, lipgloss.Width(content))).Render(content)
 }
 
-func (m pickerModel) filterCommands() []string {
+func (m pickerModel) filterItems() []PickerItem {
 	query := strings.ToLower(strings.TrimSpace(m.input.Value()))
 	if query == "" {
-		return append([]string(nil), m.allCommands...)
+		return append([]PickerItem(nil), m.allItems...)
 	}
 
-	filtered := []string{}
-	for _, command := range m.allCommands {
-		if strings.Contains(strings.ToLower(command), query) {
-			filtered = append(filtered, command)
+	filtered := []PickerItem{}
+	for _, item := range m.allItems {
+		if strings.Contains(strings.ToLower(item.Display), query) {
+			filtered = append(filtered, item)
 		}
 	}
 	return filtered
 }
 
 type visibleCommand struct {
-	index   int
-	command string
+	index int
+	item  PickerItem
 }
 
 func (m pickerModel) visibleCommands() []visibleCommand {
@@ -192,7 +203,7 @@ func (m pickerModel) visibleCommands() []visibleCommand {
 
 	items := make([]visibleCommand, 0, end-start)
 	for index := start; index < end; index++ {
-		items = append(items, visibleCommand{index: index, command: m.filtered[index]})
+		items = append(items, visibleCommand{index: index, item: m.filtered[index]})
 	}
 	return items
 }

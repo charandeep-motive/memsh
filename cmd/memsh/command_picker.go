@@ -8,11 +8,17 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charandeep-motive/memsh/internal/config"
 	"github.com/charandeep-motive/memsh/internal/db"
 	"github.com/charandeep-motive/memsh/internal/ui"
 )
+
+// formatTimestamp formats a time as "Jan _2 15:04" (12 chars, space-padded day).
+func formatTimestamp(t time.Time) string {
+	return t.Format("Jan _2 15:04")
+}
 
 func runInteractiveSearch(ctx context.Context, output io.Writer) error {
 	return runInteractivePicker(ctx, output, "", "memsh command search", "")
@@ -55,12 +61,16 @@ func runInteractivePicker(ctx context.Context, output io.Writer, initialQuery st
 		return errors.New("no stored commands found")
 	}
 
-	commands := make([]string, len(entries))
+	items := make([]ui.PickerItem, len(entries))
 	for i, e := range entries {
-		commands[i] = e.Command
+		ts := formatTimestamp(e.LastUsed)
+		items[i] = ui.PickerItem{
+			Display: ts + "  " + e.Command,
+			Value:   e.Command,
+		}
 	}
 
-	selection, err := ui.RunCommandPicker(title, commands, initialQuery, output)
+	selection, err := ui.RunCommandPicker(title, items, initialQuery, output)
 	if err != nil {
 		return err
 	}
