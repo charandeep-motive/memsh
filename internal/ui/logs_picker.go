@@ -14,30 +14,81 @@ import (
 	"github.com/charandeep-motive/memsh/internal/db"
 )
 
-// ansiEscape matches ANSI terminal escape sequences for stripping.
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+// Terminal escape / control sequences that a `script` recording captures. They
+// must be stripped before recorded output is shown in the picker or the pager:
+// left in place they move the cursor, switch screen buffers, or emit OSC colour
+// queries (vim and other full-screen programs are common sources) that corrupt
+// the surrounding UI.
+var (
+	// oscSequence matches OSC sequences (ESC ] … terminated by BEL, ST, the next
+	// ESC, or end of line), including the colour queries vim emits.
+	oscSequence = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?`)
+	// stringCommand matches DCS/SOS/PM/APC strings (ESC P/X/^/_ … ST).
+	stringCommand = regexp.MustCompile(`\x1b[PX^_][^\x1b]*\x1b\\`)
+	// csiSequence matches any CSI sequence (ESC [ params intermediates final).
+	csiSequence = regexp.MustCompile(`\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]`)
+	// csiNonSGR matches CSI sequences other than SGR colour/style (final != 'm').
+	csiNonSGR = regexp.MustCompile(`\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x6c\x6e-\x7e]`)
+	// escTwoByte matches a two-byte escape whose second byte is not '[', so SGR
+	// (ESC [ … m) is left untouched; used only on the colour-preserving path.
+	escTwoByte = regexp.MustCompile(`\x1b[^[]`)
+	// c0Control matches C0 control characters except tab and newline.
+	c0Control = regexp.MustCompile(`[\x00-\x08\x0b-\x1f\x7f]`)
+	// c0ControlKeepEsc is c0Control but keeps ESC (0x1b) so SGR sequences survive.
+	c0ControlKeepEsc = regexp.MustCompile(`[\x00-\x08\x0b-\x1a\x1c-\x1f\x7f]`)
+	// promptMarker matches a zsh PROMPT_SP end-of-line marker line — a lone "%"
+	// padded with spaces — that a recording captures just before a prompt.
+	promptMarker = regexp.MustCompile(`^%\s*$`)
+)
 
-// promptMarker matches a zsh PROMPT_SP end-of-line marker line — a lone "%"
-// padded with spaces — that a terminal recording captures just before a prompt.
-var promptMarker = regexp.MustCompile(`^%\s*$`)
+// sanitizeForDisplay strips terminal escape sequences and control characters so
+// recorded output can be shown safely. When keepColor is true, SGR colour/style
+// sequences are preserved (for a colour-capable pager); otherwise everything is
+// removed, leaving plain text.
+func sanitizeForDisplay(s string, keepColor bool) string {
+	s = oscSequence.ReplaceAllString(s, "")
+	s = stringCommand.ReplaceAllString(s, "")
+	if keepColor {
+		s = csiNonSGR.ReplaceAllString(s, "")
+		s = escTwoByte.ReplaceAllString(s, "")
+		return c0ControlKeepEsc.ReplaceAllString(s, "")
+	}
+	s = csiSequence.ReplaceAllString(s, "")
+	s = escTwoByte.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "\x1b", "")
+	return c0Control.ReplaceAllString(s, "")
+}
+
+// flattenCarriageReturns applies terminal carriage-return semantics to a single
+// line: it drops a trailing \r (from a \r\n ending), then keeps only the text
+// after any final mid-line \r (a terminal rewrites the line from column zero
+// after each bare \r, so progress bars and spinners collapse to their final
+// state).
+func flattenCarriageReturns(line string) string {
+	line = strings.TrimSuffix(line, "\r")
+	if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
+		line = line[idx+1:]
+	}
+	return line
+}
+
+func isScriptHeader(line string) bool {
+	return strings.HasPrefix(line, "Script started on ") || strings.HasPrefix(line, "Script done on ")
+}
 
 // RenderForPager flattens a raw `script` recording for display in a pager
-// (e.g. `less -R`). It drops BSD script header/footer lines and applies
-// carriage-return overwrites — a terminal rewrites a line from column zero
-// after each bare \r, so progress bars and spinners collapse to their final
-// state — while preserving ANSI colour sequences so the full view stays
-// colourised.
+// (e.g. `less -R`): it drops BSD script header/footer lines, applies
+// carriage-return overwrites, and strips cursor/screen-control and OSC
+// sequences while preserving SGR colours so the full view stays colourised.
 func RenderForPager(data []byte) []byte {
 	lines := strings.Split(string(data), "\n")
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
-		if strings.HasPrefix(line, "Script started on ") || strings.HasPrefix(line, "Script done on ") {
+		if isScriptHeader(line) {
 			continue
 		}
-		line = strings.TrimSuffix(line, "\r")
-		if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
-			line = line[idx+1:]
-		}
+		line = flattenCarriageReturns(line)
+		line = sanitizeForDisplay(line, true)
 		out = append(out, line)
 	}
 	return []byte(strings.Join(out, "\n"))
@@ -45,25 +96,18 @@ func RenderForPager(data []byte) []byte {
 
 // cleanTerminalOutput flattens a raw `script` recording into plain display
 // lines. It drops BSD script header/footer lines, applies carriage-return
-// overwrites (a terminal rewrites a line from column zero after each bare \r,
-// so only the text after the final mid-line \r survives — this collapses
-// progress bars, spinners, and the zsh prompt marker), strips ANSI escape
-// sequences, and removes blank and prompt-marker lines.
+// overwrites, strips all escape sequences and control characters, and removes
+// blank and zsh prompt-marker lines.
 func cleanTerminalOutput(data []byte) []string {
 	rawLines := strings.Split(string(data), "\n")
 	cleaned := make([]string, 0, len(rawLines))
 	for _, line := range rawLines {
-		if strings.HasPrefix(line, "Script started on ") || strings.HasPrefix(line, "Script done on ") {
+		if isScriptHeader(line) {
 			continue
 		}
 
-		line = ansiEscape.ReplaceAllString(line, "")
-		// Drop the trailing \r of a \r\n line ending, then apply any remaining
-		// mid-line \r as a column-zero overwrite.
-		line = strings.TrimSuffix(line, "\r")
-		if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
-			line = line[idx+1:]
-		}
+		line = flattenCarriageReturns(line)
+		line = sanitizeForDisplay(line, false)
 
 		if promptMarker.MatchString(line) {
 			continue
