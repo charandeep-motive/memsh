@@ -174,6 +174,9 @@ func PruneCommandLogs(ctx context.Context, store *Store, logsDir string, retenti
 	}
 
 	for _, f := range files {
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(logsDir, f)
+		}
 		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
 			return 0, fmt.Errorf("delete log file %s: %w", f, err)
 		}
