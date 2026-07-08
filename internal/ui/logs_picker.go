@@ -15,7 +15,44 @@ import (
 )
 
 // ansiEscape matches ANSI terminal escape sequences for stripping.
-var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+
+// promptMarker matches a zsh PROMPT_SP end-of-line marker line — a lone "%"
+// padded with spaces — that a terminal recording captures just before a prompt.
+var promptMarker = regexp.MustCompile(`^%\s*$`)
+
+// cleanTerminalOutput flattens a raw `script` recording into plain display
+// lines. It drops BSD script header/footer lines, applies carriage-return
+// overwrites (a terminal rewrites a line from column zero after each bare \r,
+// so only the text after the final mid-line \r survives — this collapses
+// progress bars, spinners, and the zsh prompt marker), strips ANSI escape
+// sequences, and removes blank and prompt-marker lines.
+func cleanTerminalOutput(data []byte) []string {
+	rawLines := strings.Split(string(data), "\n")
+	cleaned := make([]string, 0, len(rawLines))
+	for _, line := range rawLines {
+		if strings.HasPrefix(line, "Script started on ") || strings.HasPrefix(line, "Script done on ") {
+			continue
+		}
+
+		line = ansiEscape.ReplaceAllString(line, "")
+		// Drop the trailing \r of a \r\n line ending, then apply any remaining
+		// mid-line \r as a column-zero overwrite.
+		line = strings.TrimSuffix(line, "\r")
+		if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
+			line = line[idx+1:]
+		}
+
+		if promptMarker.MatchString(line) {
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cleaned = append(cleaned, line)
+	}
+	return cleaned
+}
 
 type logsPickerModel struct {
 	title     string
@@ -234,21 +271,7 @@ func (m logsPickerModel) loadPreview() []string {
 		return []string{"[no output captured]"}
 	}
 
-	rawLines := strings.Split(string(data), "\n")
-
-	// Strip BSD script header/footer.
-	cleaned := make([]string, 0, len(rawLines))
-	for _, l := range rawLines {
-		if strings.HasPrefix(l, "Script started on ") || strings.HasPrefix(l, "Script done on ") {
-			continue
-		}
-		// Strip ANSI escape sequences and carriage returns.
-		l = ansiEscape.ReplaceAllString(l, "")
-		l = strings.ReplaceAll(l, "\r", "")
-		if strings.TrimSpace(l) != "" {
-			cleaned = append(cleaned, l)
-		}
-	}
+	cleaned := cleanTerminalOutput(data)
 
 	// Show last up to 8 lines.
 	const maxPreviewLines = 8

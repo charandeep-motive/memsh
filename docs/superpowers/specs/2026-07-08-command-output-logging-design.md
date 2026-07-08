@@ -66,7 +66,21 @@ CREATE INDEX IF NOT EXISTS idx_command_logs_executed_at
 
 ## Shell Capture — `memsh.zsh`
 
-### New ZLE widget: `memsh_accept_line`
+> **Revised during implementation (2026-07-08).** The per-command `accept-line`
+> wrapper described below was replaced with a **whole-session** approach, because
+> rewriting `BUFFER` made the executed command line (`script … -c …`) visible in
+> the terminal and in history. The shipped design instead re-execs the interactive
+> shell once under a single `script` session (`script -qaF <session-log> zsh` on
+> macOS; `-F`/`--flush` forces real-time flushing — BSD `script` otherwise buffers
+> for 30s) and slices each command's output out of that recording by byte offset
+> (`preexec` records the start offset, `precmd` reads the end offset and copies the
+> in-between bytes into a per-command log file). The typed command line is never
+> modified. The session recording is a transient scratch file removed on shell exit
+> (`zshexit` hook). Per-command slicing still only stores logs for successful,
+> non-`memsh` commands. The original per-command-wrapper design is retained below
+> for historical context.
+
+### (Superseded) New ZLE widget: `memsh_accept_line`
 
 Registered as `accept-line` when `MEMSH_SAVE_LOGS=1`. For every non-empty buffer that isn't a memsh-internal command:
 
