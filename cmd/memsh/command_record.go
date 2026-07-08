@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/charandeep-motive/memsh/internal/db"
 	"github.com/charandeep-motive/memsh/internal/record"
 )
 
@@ -19,6 +21,7 @@ func runRecord(ctx context.Context, args []string) error {
 	directory := fs.String("directory", "", "working directory for the command")
 	exitCode := fs.Int("exit-code", 0, "command exit code")
 	usedAt := fs.String("used-at", "", "unix timestamp override")
+	logFile := fs.String("log-file", "", "path to captured output log file")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -45,5 +48,28 @@ func runRecord(ctx context.Context, args []string) error {
 	}
 	defer database.Close()
 
-	return record.Store(ctx, database, entry)
+	if err := record.Store(ctx, database, entry); err != nil {
+		return err
+	}
+
+	// Store log file reference when capture was enabled and command succeeded.
+	if *logFile != "" && *exitCode == 0 && !isInternalRecordCommand(*command) {
+		if err := db.InsertCommandLog(ctx, database,
+			strings.TrimSpace(*command),
+			*directory,
+			entry.UsedAt,
+			*exitCode,
+			*logFile,
+		); err != nil {
+			// Non-fatal: log insertion failure should not affect command recording.
+			fmt.Fprintf(os.Stderr, "memsh: store log reference: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
+func isInternalRecordCommand(command string) bool {
+	cmd := strings.TrimSpace(command)
+	return cmd == "memsh" || strings.HasPrefix(cmd, "memsh ")
 }
