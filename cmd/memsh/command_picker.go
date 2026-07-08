@@ -46,13 +46,18 @@ func runInteractivePicker(ctx context.Context, output io.Writer, initialQuery st
 		}
 	}
 
-	commands, err := db.ListCommands(ctx, database, 0, cwd, directoryAware)
+	entries, err := db.ListCommands(ctx, database, 0, cwd, directoryAware)
 	if err != nil {
 		return err
 	}
 
-	if len(commands) == 0 {
+	if len(entries) == 0 {
 		return errors.New("no stored commands found")
+	}
+
+	commands := make([]string, len(entries))
+	for i, e := range entries {
+		commands[i] = e.Command
 	}
 
 	selection, err := ui.RunCommandPicker(title, commands, initialQuery, output)

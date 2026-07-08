@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -21,18 +22,34 @@ type Stats struct {
 	TopCommands    []string
 }
 
+// CommandEntry is a command with its last-used timestamp, returned by ListCommands.
+type CommandEntry struct {
+	Command  string
+	LastUsed time.Time
+}
+
+// CommandLog is a single recorded execution of a command with its captured output path.
+type CommandLog struct {
+	ID         int64
+	Command    string
+	Directory  string
+	ExecutedAt time.Time
+	ExitCode   int
+	LogFile    string
+}
+
 // ListCommands returns distinct commands ordered for the picker. In global
 // mode commands are ranked by total frequency and recency across all
 // directories. When directoryAware is set and a directory is provided,
 // commands used in that directory rank first (by their in-directory
 // frequency and recency), followed by everything else as a global fallback.
-func ListCommands(ctx context.Context, store *Store, limit int, directory string, directoryAware bool) ([]string, error) {
+func ListCommands(ctx context.Context, store *Store, limit int, directory string, directoryAware bool) ([]CommandEntry, error) {
 	var query string
 	var args []any
 
 	if directoryAware && directory != "" {
 		query = `
-			SELECT command
+			SELECT command, MAX(last_used) as last_used
 			FROM commands
 			GROUP BY command
 			ORDER BY MAX(CASE WHEN directory = ? THEN 1 ELSE 0 END) DESC,
@@ -46,7 +63,7 @@ func ListCommands(ctx context.Context, store *Store, limit int, directory string
 		args = []any{directory, directory, directory, directory, directory}
 	} else {
 		query = `
-			SELECT command
+			SELECT command, MAX(last_used) as last_used
 			FROM commands
 			GROUP BY command
 			ORDER BY SUM(frequency) DESC, MAX(last_used) DESC
@@ -64,20 +81,114 @@ func ListCommands(ctx context.Context, store *Store, limit int, directory string
 	}
 	defer rows.Close()
 
-	commands := []string{}
+	entries := []CommandEntry{}
 	for rows.Next() {
 		var command string
-		if err := rows.Scan(&command); err != nil {
+		var lastUsedUnix int64
+		if err := rows.Scan(&command, &lastUsedUnix); err != nil {
 			return nil, fmt.Errorf("scan command: %w", err)
 		}
-		commands = append(commands, command)
+		entries = append(entries, CommandEntry{
+			Command:  command,
+			LastUsed: time.Unix(lastUsedUnix, 0),
+		})
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate commands: %w", err)
 	}
 
-	return commands, nil
+	return entries, nil
+}
+
+// InsertCommandLog records a single command execution and its log file path.
+func InsertCommandLog(ctx context.Context, store *Store, command, directory string, executedAt time.Time, exitCode int, logFile string) error {
+	_, err := store.ExecContext(ctx, `
+		INSERT INTO command_logs (command, directory, executed_at, exit_code, log_file)
+		VALUES (?, ?, ?, ?, ?)
+	`, command, directory, executedAt.Unix(), exitCode, logFile)
+	if err != nil {
+		return fmt.Errorf("insert command log: %w", err)
+	}
+	return nil
+}
+
+// ListCommandLogs returns recorded command executions ordered by most recent first.
+// Pass limit=0 for all rows.
+func ListCommandLogs(ctx context.Context, store *Store, limit int) ([]CommandLog, error) {
+	query := `
+		SELECT id, command, directory, executed_at, exit_code, log_file
+		FROM command_logs
+		ORDER BY executed_at DESC
+	`
+	var args []any
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := store.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list command logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []CommandLog
+	for rows.Next() {
+		var cl CommandLog
+		var executedAtUnix int64
+		if err := rows.Scan(&cl.ID, &cl.Command, &cl.Directory, &executedAtUnix, &cl.ExitCode, &cl.LogFile); err != nil {
+			return nil, fmt.Errorf("scan command log: %w", err)
+		}
+		cl.ExecutedAt = time.Unix(executedAtUnix, 0)
+		logs = append(logs, cl)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate command logs: %w", err)
+	}
+	return logs, nil
+}
+
+// PruneCommandLogs deletes command_logs rows older than retentionDays and removes
+// their log files from disk. Returns the number of rows deleted.
+func PruneCommandLogs(ctx context.Context, store *Store, logsDir string, retentionDays int) (int64, error) {
+	cutoff := time.Now().Unix() - int64(retentionDays)*86400
+
+	rows, err := store.QueryContext(ctx,
+		`SELECT log_file FROM command_logs WHERE executed_at < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("query stale logs: %w", err)
+	}
+	var files []string
+	for rows.Next() {
+		var f string
+		if err := rows.Scan(&f); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan log file: %w", err)
+		}
+		files = append(files, f)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate stale logs: %w", err)
+	}
+
+	for _, f := range files {
+		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+			return 0, fmt.Errorf("delete log file %s: %w", f, err)
+		}
+	}
+
+	result, err := store.ExecContext(ctx,
+		`DELETE FROM command_logs WHERE executed_at < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("delete stale log rows: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("count deleted rows: %w", err)
+	}
+	return deleted, nil
 }
 
 func PruneLeastUsedCommands(ctx context.Context, store *Store) (int64, error) {
@@ -204,12 +315,23 @@ func migrate(ctx context.Context, database *sql.DB) error {
 	defer tx.Rollback()
 
 	if tableExists == 0 {
+		// Fresh install — apply full schema.
 		if _, err := tx.ExecContext(ctx, schema); err != nil {
 			return fmt.Errorf("create schema: %w", err)
 		}
-	} else {
+	} else if userVersion == 0 {
+		// v0 → v1: rebuild commands with composite key.
 		if _, err := tx.ExecContext(ctx, migrateToCompositeKey); err != nil {
 			return fmt.Errorf("migrate to composite key: %w", err)
+		}
+		// v1 → v2: add command_logs.
+		if _, err := tx.ExecContext(ctx, migrateAddCommandLogs); err != nil {
+			return fmt.Errorf("migrate add command_logs: %w", err)
+		}
+	} else if userVersion == 1 {
+		// v1 → v2: add command_logs.
+		if _, err := tx.ExecContext(ctx, migrateAddCommandLogs); err != nil {
+			return fmt.Errorf("migrate add command_logs: %w", err)
 		}
 	}
 

@@ -122,7 +122,7 @@ func TestListCommandsDirectoryAwareRanksCurrentDirectoryFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list global: %v", err)
 	}
-	if len(global) == 0 || global[0] != "global thing" {
+	if len(global) == 0 || global[0].Command != "global thing" {
 		t.Fatalf("global order = %v, want 'global thing' first", global)
 	}
 
@@ -135,7 +135,68 @@ func TestListCommandsDirectoryAwareRanksCurrentDirectoryFirst(t *testing.T) {
 	if len(aware) < 2 {
 		t.Fatalf("dir-aware order = %v, want at least 2 commands", aware)
 	}
-	if aware[0] != "local thing" {
-		t.Fatalf("dir-aware first = %q, want 'local thing'", aware[0])
+	if aware[0].Command != "local thing" {
+		t.Fatalf("dir-aware first = %q, want 'local thing'", aware[0].Command)
+	}
+}
+
+func TestSchemaMigratesV1ToV2AddsCommandLogs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "memsh.db")
+
+	// Build a v1 database (composite-key schema, no command_logs table).
+	v1db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open v1 database: %v", err)
+	}
+	v1Schema := `
+	CREATE TABLE commands (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		command TEXT NOT NULL,
+		frequency INTEGER NOT NULL DEFAULT 1,
+		last_used INTEGER NOT NULL,
+		directory TEXT NOT NULL DEFAULT '',
+		exit_code INTEGER NOT NULL DEFAULT 0,
+		UNIQUE(command, directory)
+	);
+	PRAGMA user_version = 1;
+	`
+	if _, err := v1db.ExecContext(ctx, v1Schema); err != nil {
+		t.Fatalf("create v1 schema: %v", err)
+	}
+	if _, err := v1db.ExecContext(ctx,
+		`INSERT INTO commands (command, frequency, last_used, directory, exit_code) VALUES ('git status', 3, 1700000000, '/repo', 0)`,
+	); err != nil {
+		t.Fatalf("seed v1 row: %v", err)
+	}
+	if err := v1db.Close(); err != nil {
+		t.Fatalf("close v1 database: %v", err)
+	}
+
+	// Open through memsh — should migrate to v2.
+	store, err := db.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("open and migrate: %v", err)
+	}
+	defer store.Close()
+
+	// Existing row is preserved.
+	var freq int
+	if err := store.QueryRowContext(ctx,
+		`SELECT frequency FROM commands WHERE command = 'git status'`,
+	).Scan(&freq); err != nil {
+		t.Fatalf("query migrated row: %v", err)
+	}
+	if freq != 3 {
+		t.Fatalf("frequency = %d, want 3", freq)
+	}
+
+	// command_logs table now exists and is writable.
+	if _, err := store.ExecContext(ctx,
+		`INSERT INTO command_logs (command, directory, executed_at, exit_code, log_file) VALUES ('git status', '/repo', 1700000001, 0, '/tmp/test.log')`,
+	); err != nil {
+		t.Fatalf("insert into command_logs after migration: %v", err)
 	}
 }
