@@ -5,6 +5,39 @@ import (
 	"testing"
 )
 
+func TestRenderForPager(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "git progress collapses to final state",
+			in:   "remote: Counting objects: 0% (1/1324)\rremote: Counting objects: 100% (1324/1324), done.\r\n",
+			want: "remote: Counting objects: 100% (1324/1324), done.\n",
+		},
+		{
+			name: "ansi colour sequences preserved",
+			in:   "\x1b[32mdone\x1b[0m\r\n",
+			want: "\x1b[32mdone\x1b[0m\n",
+		},
+		{
+			name: "bsd headers dropped",
+			in:   "Script started on X\nhello\r\nScript done on Y\n",
+			want: "hello\n",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(RenderForPager([]byte(tc.in)))
+			if got != tc.want {
+				t.Errorf("RenderForPager(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCleanTerminalOutput(t *testing.T) {
 	cases := []struct {
 		name string

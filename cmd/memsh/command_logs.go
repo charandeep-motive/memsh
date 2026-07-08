@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -50,14 +51,20 @@ func runLogs(ctx context.Context, _ []string, output io.Writer) error {
 		return nil
 	}
 
-	if _, err := os.Stat(selected); os.IsNotExist(err) {
-		fmt.Fprintln(output, "log file not found (expired)")
-		return nil
+	data, err := os.ReadFile(selected)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintln(output, "log file not found (expired)")
+			return nil
+		}
+		return err
 	}
 
-	// Open full log in less, preserving ANSI colours.
-	cmd := exec.Command("less", "-R", selected)
-	cmd.Stdin = os.Stdin
+	// Flatten carriage-return overwrites (e.g. git/download progress bars) and
+	// drop script headers before paging, keeping ANSI colours. less reads the
+	// cleaned content from stdin and the keyboard from the controlling TTY.
+	cmd := exec.Command("less", "-R")
+	cmd.Stdin = bytes.NewReader(ui.RenderForPager(data))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

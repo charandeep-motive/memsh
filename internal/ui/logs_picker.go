@@ -21,6 +21,28 @@ var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 // padded with spaces — that a terminal recording captures just before a prompt.
 var promptMarker = regexp.MustCompile(`^%\s*$`)
 
+// RenderForPager flattens a raw `script` recording for display in a pager
+// (e.g. `less -R`). It drops BSD script header/footer lines and applies
+// carriage-return overwrites — a terminal rewrites a line from column zero
+// after each bare \r, so progress bars and spinners collapse to their final
+// state — while preserving ANSI colour sequences so the full view stays
+// colourised.
+func RenderForPager(data []byte) []byte {
+	lines := strings.Split(string(data), "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Script started on ") || strings.HasPrefix(line, "Script done on ") {
+			continue
+		}
+		line = strings.TrimSuffix(line, "\r")
+		if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
+			line = line[idx+1:]
+		}
+		out = append(out, line)
+	}
+	return []byte(strings.Join(out, "\n"))
+}
+
 // cleanTerminalOutput flattens a raw `script` recording into plain display
 // lines. It drops BSD script header/footer lines, applies carriage-return
 // overwrites (a terminal rewrites a line from column zero after each bare \r,
