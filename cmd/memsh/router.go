@@ -37,6 +37,10 @@ func run(ctx context.Context, args []string) error {
 		return runStats(ctx)
 	case "doctor":
 		return runDoctor(ctx)
+	case "logs":
+		return runLogs(ctx, args[1:], os.Stdout)
+	case "log-dir":
+		return runLogDir()
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}

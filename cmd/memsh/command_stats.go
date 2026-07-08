@@ -50,6 +50,7 @@ func runDoctor(ctx context.Context) error {
 	fmt.Printf("config_dir=%s\n", paths.ConfigDir)
 	fmt.Printf("settings=%s\n", paths.SettingsPath)
 	fmt.Printf("database=%s\n", paths.DatabasePath)
+	fmt.Printf("logs_dir=%s\n", paths.LogsDir)
 	fmt.Printf("unique_commands=%d\n", stats.UniqueCommands)
 	return nil
 }
