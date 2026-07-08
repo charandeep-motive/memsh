@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charandeep-motive/memsh/internal/config"
 	"github.com/charandeep-motive/memsh/internal/db"
 )
 
@@ -40,7 +41,7 @@ func runDelete(ctx context.Context, args []string) error {
 }
 
 func runClear(ctx context.Context, input io.Reader, output io.Writer) error {
-	confirmed, err := confirmAction(input, output, "Prune the least-used 10% of stored commands? [Y/n]: ")
+	confirmed, err := confirmAction(input, output, "Prune the least-used 10%% of stored commands and expired log files? [Y/n]: ")
 	if err != nil {
 		return err
 	}
@@ -49,7 +50,12 @@ func runClear(ctx context.Context, input io.Reader, output io.Writer) error {
 		return nil
 	}
 
-	database, err := openDatabase(ctx)
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return err
+	}
+
+	database, err := db.Open(ctx, paths.DatabasePath)
 	if err != nil {
 		return err
 	}
@@ -59,8 +65,16 @@ func runClear(ctx context.Context, input io.Reader, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-
 	fmt.Fprintf(output, "cleared: %d commands\n", cleared)
+
+	pruned, err := db.PruneCommandLogs(ctx, database, paths.LogsDir, config.LogRetentionDays())
+	if err != nil {
+		return err
+	}
+	if pruned > 0 {
+		fmt.Fprintf(output, "pruned: %d expired log files\n", pruned)
+	}
+
 	return nil
 }
 
