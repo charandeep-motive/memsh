@@ -41,7 +41,7 @@ func runDelete(ctx context.Context, args []string) error {
 }
 
 func runClear(ctx context.Context, input io.Reader, output io.Writer) error {
-	confirmed, err := confirmAction(input, output, "Prune the least-used 10%% of stored commands and expired log files? [Y/n]: ")
+	confirmed, err := confirmAction(input, output, "Prune the least-used 10% of stored commands and expired log files? [Y/n]: ")
 	if err != nil {
 		return err
 	}
