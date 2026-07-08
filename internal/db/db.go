@@ -154,6 +154,7 @@ func ListCommandLogs(ctx context.Context, store *Store, limit int) ([]CommandLog
 func PruneCommandLogs(ctx context.Context, store *Store, logsDir string, retentionDays int) (int64, error) {
 	cutoff := time.Now().Unix() - int64(retentionDays)*86400
 
+	// Collect file paths before deleting rows.
 	rows, err := store.QueryContext(ctx,
 		`SELECT log_file FROM command_logs WHERE executed_at < ?`, cutoff)
 	if err != nil {
@@ -173,15 +174,7 @@ func PruneCommandLogs(ctx context.Context, store *Store, logsDir string, retenti
 		return 0, fmt.Errorf("iterate stale logs: %w", err)
 	}
 
-	for _, f := range files {
-		if !filepath.IsAbs(f) {
-			f = filepath.Join(logsDir, f)
-		}
-		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
-			return 0, fmt.Errorf("delete log file %s: %w", f, err)
-		}
-	}
-
+	// Delete DB rows first — if this fails, files remain on disk (harmless).
 	result, err := store.ExecContext(ctx,
 		`DELETE FROM command_logs WHERE executed_at < ?`, cutoff)
 	if err != nil {
@@ -191,6 +184,17 @@ func PruneCommandLogs(ctx context.Context, store *Store, logsDir string, retenti
 	if err != nil {
 		return 0, fmt.Errorf("count deleted rows: %w", err)
 	}
+
+	// Delete files after rows are gone — orphaned files are benign.
+	for _, f := range files {
+		if !filepath.IsAbs(f) {
+			f = filepath.Join(logsDir, f)
+		}
+		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+			return 0, fmt.Errorf("delete log file %s: %w", f, err)
+		}
+	}
+
 	return deleted, nil
 }
 
