@@ -31,6 +31,16 @@ func DirectoryAwarenessEnabled() bool {
 	return strings.TrimSpace(os.Getenv("MEMSH_ENABLE_DIRECTORY_AWARENESS")) == "1"
 }
 
+// SaveLogsEnabled reports whether command output capture is turned on.
+func SaveLogsEnabled() bool {
+	return strings.TrimSpace(os.Getenv("MEMSH_SAVE_LOGS")) == "1"
+}
+
+// LogRetentionDays returns the number of days to keep command log files.
+func LogRetentionDays() int {
+	return positiveIntSetting("MEMSH_LOG_RETENTION_DAYS", 1)
+}
+
 // positiveIntSetting reads an integer setting from the environment, falling
 // back to the setting's declared default when the value is unset, invalid,
 // or below the given minimum.

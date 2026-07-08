@@ -68,3 +68,31 @@ func TestDirectoryAwarenessEnabled(t *testing.T) {
 		t.Fatal("DirectoryAwarenessEnabled() = true, want false when unset")
 	}
 }
+
+func TestSaveLogsEnabledDefaultsOff(t *testing.T) {
+	t.Setenv("MEMSH_SAVE_LOGS", "")
+	if config.SaveLogsEnabled() {
+		t.Error("SaveLogsEnabled() = true with empty env, want false")
+	}
+}
+
+func TestSaveLogsEnabledWhenSet(t *testing.T) {
+	t.Setenv("MEMSH_SAVE_LOGS", "1")
+	if !config.SaveLogsEnabled() {
+		t.Error("SaveLogsEnabled() = false with MEMSH_SAVE_LOGS=1, want true")
+	}
+}
+
+func TestLogRetentionDaysDefault(t *testing.T) {
+	t.Setenv("MEMSH_LOG_RETENTION_DAYS", "")
+	if got := config.LogRetentionDays(); got != 10 {
+		t.Errorf("LogRetentionDays() = %d, want 10", got)
+	}
+}
+
+func TestLogRetentionDaysCustom(t *testing.T) {
+	t.Setenv("MEMSH_LOG_RETENTION_DAYS", "30")
+	if got := config.LogRetentionDays(); got != 30 {
+		t.Errorf("LogRetentionDays() = %d, want 30", got)
+	}
+}

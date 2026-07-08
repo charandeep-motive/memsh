@@ -12,6 +12,7 @@ type Paths struct {
 	SettingsPath string
 	DataDir      string
 	DatabasePath string
+	LogsDir      string
 }
 
 func ResolvePaths() (Paths, error) {
@@ -32,6 +33,7 @@ func ResolvePaths() (Paths, error) {
 		SettingsPath: filepath.Join(configDir, "settings.zsh"),
 		DataDir:      dataDir,
 		DatabasePath: filepath.Join(dataDir, "memsh.db"),
+		LogsDir:      filepath.Join(dataDir, "logs"),
 	}, nil
 }
 

@@ -68,6 +68,22 @@ var settingSpecs = []SettingSpec{
 		ValueHint:   "0|1",
 		Validator:   validateBoolSetting,
 	},
+	{
+		Key:         "MEMSH_LOG_RETENTION_DAYS",
+		Default:     "10",
+		Description: "Days to retain command output log files (requires MEMSH_SAVE_LOGS=1)",
+		ValueHint:   "integer >= 1",
+		Validator: func(value string) error {
+			return validateMinIntSetting(value, 1)
+		},
+	},
+	{
+		Key:         "MEMSH_SAVE_LOGS",
+		Default:     "0",
+		Description: "Capture command output to log files for later review with `memsh logs`",
+		ValueHint:   "0|1",
+		Validator:   validateBoolSetting,
+	},
 }
 
 func SupportedSettings() []SettingSpec {
