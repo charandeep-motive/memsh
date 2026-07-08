@@ -60,6 +60,10 @@ memsh_precmd() {
 # memsh_accept_line intercepts command execution to capture output via `script`
 # when MEMSH_SAVE_LOGS=1. The original BUFFER is saved so precmd records the
 # real command, not the script wrapper.
+#
+# Invocation differs by platform: BSD script (macOS) takes the command as
+# positional arguments after the file (`script -q FILE cmd args...`), while
+# util-linux (Linux) uses `-c` with the file last (`script -q -c "cmd" FILE`).
 memsh_accept_line() {
   local original_buffer="$BUFFER"
   local trimmed="${original_buffer//[[:space:]]/}"
@@ -71,7 +75,12 @@ memsh_accept_line() {
     if [[ -n "$MEMSH_LOG_DIR" && -n "$rand" ]]; then
       MEMSH_PENDING_COMMAND="$original_buffer"
       MEMSH_LOG_FILE="${MEMSH_LOG_DIR}/${ts}_${rand}.log"
-      BUFFER="script -q ${(q)MEMSH_LOG_FILE} -- zsh -i -c ${(q)original_buffer}"
+      if [[ "$OSTYPE" == darwin* ]]; then
+        BUFFER="script -q ${(q)MEMSH_LOG_FILE} zsh -i -c ${(q)original_buffer}"
+      else
+        local memsh_inner="zsh -i -c ${(q)original_buffer}"
+        BUFFER="script -q -c ${(q)memsh_inner} ${(q)MEMSH_LOG_FILE}"
+      fi
     fi
   fi
 
