@@ -153,7 +153,11 @@ func RunLogsPicker(title string, logs []db.CommandLog, output io.Writer) (string
 	model.filtered = model.filterLogs()
 	model.preview = model.loadPreview()
 
-	program := tea.NewProgram(model, tea.WithOutput(output))
+	// Use the alternate screen: this picker is tall (list + preview pane), and
+	// the inline renderer garbles frames taller than the terminal window
+	// (duplicated header/input lines). The alt screen clears each frame and is
+	// restored on exit — the standard behaviour for a full-screen picker.
+	program := tea.NewProgram(model, tea.WithOutput(output), tea.WithAltScreen())
 	finalModel, err := program.Run()
 	if err != nil {
 		return "", err
