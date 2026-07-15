@@ -33,6 +33,10 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          # Tags with a pre-release identifier (e.g. v0.3.0-beta) are published
+          # as pre-releases so they do not become the "latest" release that the
+          # default curl installer downloads.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist/memsh-darwin-amd64
             dist/memsh-darwin-arm64

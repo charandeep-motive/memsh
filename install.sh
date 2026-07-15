@@ -8,6 +8,27 @@ INSTALL_BIN_DIR="${MEMSH_INSTALL_BIN_DIR:-$HOME/.local/bin}"
 INSTALL_CONFIG_DIR="${MEMSH_INSTALL_CONFIG_DIR:-$HOME/.config/memsh}"
 ZSHRC_PATH="${MEMSH_ZSHRC:-$HOME/.zshrc}"
 
+# Optional release to install. Empty means the latest stable release.
+# Set via MEMSH_VERSION=vX.Y.Z or the --version flag (e.g. piped:
+# curl ... | bash -s -- --version v0.2.0).
+MEMSH_VERSION="${MEMSH_VERSION:-}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      MEMSH_VERSION="${2:-}"
+      shift 2
+      ;;
+    --version=*)
+      MEMSH_VERSION="${1#*=}"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 # Best-effort directory of this script. Empty when piped via `curl | bash`,
 # which is exactly how we detect a remote install below.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
@@ -88,10 +109,14 @@ resolve_from_release() {
 
   local asset base
   asset="$(detect_asset)"
-  base="https://github.com/$REPO/releases/latest/download"
+  if [[ -n "$MEMSH_VERSION" ]]; then
+    base="https://github.com/$REPO/releases/download/$MEMSH_VERSION"
+  else
+    base="https://github.com/$REPO/releases/latest/download"
+  fi
 
   TMP_DIR="$(mktemp -d)"
-  say "Downloading latest memsh release ($asset)..."
+  say "Downloading memsh release ${MEMSH_VERSION:-latest} ($asset)..."
   download "$base/$asset" "$TMP_DIR/memsh"
   download "$base/memsh.zsh" "$TMP_DIR/memsh.zsh"
   chmod +x "$TMP_DIR/memsh"
@@ -108,7 +133,11 @@ if ! command -v zsh >/dev/null 2>&1; then
   fail "zsh is required"
 fi
 
-if ! resolve_from_source; then
+# An explicit --version always installs that published release, even inside a
+# checkout. Otherwise prefer a local source build and fall back to the release.
+if [[ -n "$MEMSH_VERSION" ]]; then
+  resolve_from_release
+elif ! resolve_from_source; then
   resolve_from_release
 fi
 
