@@ -288,6 +288,11 @@
           <h3>Clean history</h3>
           <p>Only exit-code&nbsp;0 commands are stored, so typos and failures never pollute your suggestions.</p>
         </div>
+        <div class="card">
+          <div class="ico">📜</div>
+          <h3>Output capture &amp; replay</h3>
+          <p>Optionally record each command's output to a log file and browse it later with <code>memsh logs</code> — an interactive viewer with configurable retention.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -302,8 +307,10 @@
           <div class="num"></div>
           <div>
             <h3>Install</h3>
-            <p><strong>Option A — curl (recommended).</strong> Downloads the prebuilt binary and zsh plugin for your architecture. No Go toolchain needed.</p>
+            <p><strong>Option A — curl (recommended).</strong> Installs the latest stable release — the prebuilt binary and zsh plugin for your architecture. No Go toolchain needed.</p>
             <pre class="code"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash</pre>
+            <p style="margin-top:12px;"><span class="cmt">Pin a specific release with <code>--version</code>:</span></p>
+            <pre class="code"><span class="prompt">$ </span>curl -fsSL https://raw.githubusercontent.com/charandeep-motive/memsh/main/install.sh | bash -s -- --version v0.2.0</pre>
             <p style="margin-top:16px;"><strong>Option B — from source.</strong> Clone the repo and run the installer, which builds the binary with Go.</p>
             <pre class="code"><span class="prompt">$ </span>git clone https://github.com/charandeep-motive/memsh.git
 <span class="prompt">$ </span>cd memsh
@@ -374,6 +381,16 @@
               <td><code>MEMSH_ENABLE_DIRECTORY_AWARENESS</code></td>
               <td><span class="def">0</span></td>
               <td>Rank commands used in the current directory first.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_SAVE_LOGS</code></td>
+              <td><span class="def">0</span></td>
+              <td>Capture command output to log files for later review with <code>memsh logs</code>.</td>
+            </tr>
+            <tr>
+              <td><code>MEMSH_LOG_RETENTION_DAYS</code></td>
+              <td><span class="def">10</span></td>
+              <td>Days to retain captured output logs (requires <code>MEMSH_SAVE_LOGS=1</code>).</td>
             </tr>
           </tbody>
         </table>
